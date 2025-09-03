@@ -8,7 +8,6 @@ import qualified Data.List.NonEmpty as NE
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 
--- from the "network-run" package.
 runTCPServer :: Maybe HostName -> ServiceName -> (Socket -> IO a) -> IO a
 runTCPServer mhost port server = do
     addr <- resolve
@@ -33,3 +32,10 @@ runTCPServer mhost port server = do
             -- non-atomic setups (e.g. spawning a subprocess to handle
             -- @conn@) before proper cleanup of @conn@ is your case
             forkFinally (server conn) (const $ gracefulClose conn 5000)
+
+talk :: Socket -> IO ()
+talk s = do
+  msg <- recv s 1024
+  unless (S.null msg) $ do
+    sendAll s msg
+    talk s
