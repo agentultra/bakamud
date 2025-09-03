@@ -50,16 +50,16 @@ runTCPServer mhost port server = do
 
     loop :: TVar ServerState -> Socket -> IO a
     loop serverState sock = forever $ E.bracketOnError (accept sock) (close . fst)
-        $ \(conn, _peer) -> void $
+        $ \(conn, _peer) -> void $ do
             -- 'forkFinally' alone is unlikely to fail thus leaking @conn@,
             -- but 'E.bracketOnError' above will be necessary if some
             -- non-atomic setups (e.g. spawning a subprocess to handle
             -- @conn@) before proper cleanup of @conn@ is your case
+            sendAll conn "Welcome to Bakamud!\n"
             forkFinally (server serverState conn) (const $ gracefulClose conn 5000)
 
 talk :: TVar ServerState -> Socket -> IO ()
 talk serverState s = do
-  sendAll s "Welcome to Bakamud!\n"
   msg <- recv s 1024
   unless (S.null msg) $ do
     case msg of
