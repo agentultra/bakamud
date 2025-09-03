@@ -1,3 +1,5 @@
+{-#LANGUAGE OverloadedStrings #-}
+
 module Bakamud.Network.Server where
 
 import Control.Concurrent (forkFinally)
@@ -35,6 +37,7 @@ runTCPServer mhost port server = do
 
 talk :: Socket -> IO ()
 talk s = do
+  sendAll s "Welcome to Bakamud!\n"
   msg <- recv s 1024
   unless (S.null msg) $ do
     sendAll s msg
