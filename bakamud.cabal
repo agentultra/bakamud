@@ -60,6 +60,8 @@ library
 
     -- Modules exported by the library.
     exposed-modules:
+        Bakamud.Auth
+        Bakamud.Network.Connection
         Bakamud.Network.Server
 
     -- Modules included in this library but not exported.
