@@ -63,6 +63,8 @@ library
         Bakamud.Auth
         Bakamud.Network.Connection
         Bakamud.Network.Server
+        Bakamud.Server.State
+        Bakamud.Simulation
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -76,7 +78,8 @@ library
         bytestring,
         containers,
         network == 3.2.7.0,
-        stm == 2.5.3.1
+        stm == 2.5.3.1,
+        text
 
     -- Directories containing source files.
     hs-source-dirs:   src

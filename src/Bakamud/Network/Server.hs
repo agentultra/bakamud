@@ -1,35 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Bakamud.Network.Server where
 
 import Bakamud.Auth
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
+import Bakamud.Server.State
+import Bakamud.Simulation
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.STM
+import qualified Control.Concurrent.STM.TBQueue as TB
 import qualified Control.Exception as E
-import Control.Monad (unless, forever, void)
+import Control.Monad (forever, when, void)
 import qualified Data.ByteString as S
-import qualified Data.ByteString.Char8 as C
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
 import qualified Data.Map as Map
+import qualified Data.Text.Encoding as T
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 
-data ServerState
-  = ServerState
-  { _serverStateConnections :: Map ConnectionId Connection
-  }
-  deriving (Eq, Show)
-
-emptyServerState :: ServerState
-emptyServerState = ServerState { _serverStateConnections = mempty }
-
-runTCPServer :: Maybe HostName -> ServiceName -> (TVar ServerState -> Socket -> IO a) -> IO a
-runTCPServer mhost port server = do
+runTCPServer :: Maybe HostName -> ServiceName -> IO a
+runTCPServer mhost port = do
     addr <- resolve
     serverState <- newTVarIO emptyServerState
+    _ <- forkFinally (simulation serverState) (const $ pure ())
     E.bracket (open addr) close $ loop serverState
   where
     resolve :: IO AddrInfo
@@ -55,23 +50,37 @@ runTCPServer mhost port server = do
             -- but 'E.bracketOnError' above will be necessary if some
             -- non-atomic setups (e.g. spawning a subprocess to handle
             -- @conn@) before proper cleanup of @conn@ is your case
-            sendAll conn "Welcome to Bakamud!\n"
-            forkFinally (server serverState conn) (const $ gracefulClose conn 5000)
+            clientConnection <- initConnection serverState conn
+            atomically $ TB.writeTBQueue (_connectionOutput clientConnection) "Welcome to BakaMUD!\n"
+            _ <- forkFinally (output clientConnection) (const $ gracefulClose conn 5000)
+            forkFinally (talk clientConnection) (const $ gracefulClose conn 5000)
 
-talk :: TVar ServerState -> Socket -> IO ()
-talk serverState s = do
-  msg <- recv s 1024
-  unless (S.null msg) $ do
-    case msg of
-      "auth\r\n" -> do
-        let cid = ConnectionId 1
-            connection = Connection Anonymous
-        atomically $ modifyTVar serverState (addConnection cid connection)
-      "yo\r\n" -> do
-        ss <- atomically $ readTVar serverState
-        sendAll s . C.pack $ show ss
-      _ -> sendAll s msg
-    talk serverState s
+    initConnection :: TVar ServerState -> Socket -> IO Connection
+    initConnection serverState s = do
+      inputQ <- newTBQueueIO 2
+      outputQ <- newTBQueueIO 100
+      let cid = ConnectionId 1
+          connection = Connection Anonymous s inputQ outputQ
+      atomically $ modifyTVar serverState (addConnection cid connection)
+      pure connection
+
+talk :: Connection -> IO ()
+talk c@Connection {..} = do
+  msg <- recv _connectionSocket 1024
+  when (not . S.null $ msg) . atomically $ do
+    inputQFull <- TB.isFullTBQueue _connectionInput
+    if inputQFull
+      then TB.writeTBQueue _connectionOutput "Command input queue is full please wait and try again."
+      else TB.writeTBQueue _connectionInput $ T.decodeUtf8 msg
+  talk c
+
+output :: Connection -> IO ()
+output c@Connection {..} = do
+  outputQEmpty <- atomically $ TB.isEmptyTBQueue _connectionOutput
+  when (not outputQEmpty) $ do
+    outputMsg <- atomically $ readTBQueue _connectionOutput
+    sendAll _connectionSocket $ T.encodeUtf8 outputMsg
+  output c
 
 addConnection
   :: ConnectionId

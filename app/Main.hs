@@ -1,6 +1,6 @@
 module Main where
 
-import Bakamud.Network.Server (runTCPServer, talk)
+import Bakamud.Network.Server (runTCPServer)
 
 main :: IO ()
-main = runTCPServer Nothing "3000" talk
+main = runTCPServer Nothing "3000"
