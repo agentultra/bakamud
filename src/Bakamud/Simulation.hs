@@ -9,7 +9,7 @@ import Bakamud.Server.State
 import Control.Concurrent.STM
 import Control.Concurrent (threadDelay)
 
-simulation :: TVar ServerState -> IO ()
+simulation :: TVar (ServerState IO) -> IO ()
 simulation serverState = do
   state <- atomically $ readTVar serverState
   (`traverse_` (_serverStateConnections state)) $ \Connection {..} ->
