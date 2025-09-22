@@ -17,6 +17,7 @@ import qualified Control.Concurrent.STM.TBQueue as TB
 import qualified Control.Exception as E
 import Control.Monad (forever, when, void)
 import Control.Monad.IO.Class
+import Control.Monad.Reader
 import qualified Data.ByteString as S
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
@@ -25,7 +26,22 @@ import qualified Data.Text.Encoding as T
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 
-runTCPServer :: Maybe HostName -> ServiceName -> IO a
+newtype BakamudServer m a
+  = BakamudServer
+  { getBakamudServer :: ReaderT (ServerState m) m a
+  }
+  deriving
+    ( Applicative
+    , Functor
+    , Monad
+    , MonadIO
+    , MonadReader (ServerState m)
+    )
+
+runBakamudServer :: MonadIO m => ServerState m -> BakamudServer m a -> m a
+runBakamudServer serverState = (`runReaderT` serverState) . getBakamudServer
+
+runTCPServer :: MonadIO m => Maybe HostName -> ServiceName -> BakamudServer m a
 runTCPServer mhost port = do
     addr <- liftIO resolve
     serverState <- liftIO . newTVarIO $ emptyServerState Log.logTextStdout

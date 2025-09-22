@@ -108,6 +108,8 @@ executable bakamud
         base ^>=4.18.3.0,
         bakamud,
         bytestring,
+        co-log,
+        co-log-core,
         network == 3.2.7.0
 
     -- Directories containing source files.
