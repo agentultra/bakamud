@@ -9,7 +9,6 @@ import Bakamud.Monad.Reader (bracketBakamudServer)
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
 import Bakamud.Server
 import Bakamud.Server.State
-import Bakamud.Simulation
 import Colog.Core.Action (LogAction (..))
 import qualified Colog.Core.Class as Log
 import Control.Concurrent (forkFinally)
@@ -63,19 +62,19 @@ runTCPServer mhost port = do
       -- 'forkFinally' alone is unlikely to fail thus leaking @conn@,
       -- but 'E.bracketOnError' above will be necessary if some
       -- non-atomic setups (e.g. spawning a subprocess to handle
-      clientConnection <- initConnection serverState conn
+      clientConnection <- initConnection conn
       let LogAction l = Log.getLogAction @_ @Text serverState
       l "Received Connection!"
       atomically $ TB.writeTBQueue (_connectionOutput clientConnection) "Welcome to BakaMUD!\n"
       _ <- forkFinally (output clientConnection) (const $ gracefulClose conn 5000)
       forkFinally (talk clientConnection) (const $ gracefulClose conn 5000)
 
-    initConnection :: ServerState IO -> Socket -> IO Connection
-    initConnection serverState s = do
+    initConnection :: Socket -> IO Connection
+    initConnection s = do
       inputQ <- newTBQueueIO 2
       outputQ <- newTBQueueIO 100
-      let cid = ConnectionId 1
-          connection = Connection Anonymous s inputQ outputQ
+      let connection = Connection Anonymous s inputQ outputQ
+      -- let cid = ConnectionId 1
       -- atomically $ modifyTVar serverState (addConnection cid connection)
       pure connection
 
