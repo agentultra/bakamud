@@ -5,12 +5,13 @@
 module Bakamud.Network.Server where
 
 import Bakamud.Auth
+import Bakamud.Monad.Reader (bracketBakamudServer)
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
+import Bakamud.Server
 import Bakamud.Server.State
 import Bakamud.Simulation
 import Colog.Core.Action (LogAction (..))
 import qualified Colog.Core.Class as Log
-import qualified Colog.Actions as Log
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as TB
@@ -26,27 +27,12 @@ import qualified Data.Text.Encoding as T
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 
-newtype BakamudServer m a
-  = BakamudServer
-  { getBakamudServer :: ReaderT (ServerState m) m a
-  }
-  deriving
-    ( Applicative
-    , Functor
-    , Monad
-    , MonadIO
-    , MonadReader (ServerState m)
-    )
-
-runBakamudServer :: MonadIO m => ServerState m -> BakamudServer m a -> m a
-runBakamudServer serverState = (`runReaderT` serverState) . getBakamudServer
-
-runTCPServer :: MonadIO m => Maybe HostName -> ServiceName -> BakamudServer m a
+runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
-    serverState <- liftIO . newTVarIO $ emptyServerState Log.logTextStdout
-    _ <- liftIO $ forkFinally (simulation serverState) (const $ pure ())
-    liftIO $ E.bracket (liftIO $ open addr) (liftIO . close) $ loop serverState
+    -- _ <- forkFinally (simulation) (const $ pure ())
+    serverState <- ask
+    bracketBakamudServer (open addr) (close_) $ loop serverState
   where
     resolve :: IO AddrInfo
     resolve = do
@@ -56,7 +42,7 @@ runTCPServer mhost port = do
               }
         NE.head <$> getAddrInfo (Just hints) mhost (Just port)
 
-    open :: AddrInfo -> IO Socket
+    open :: AddrInfo -> BakamudServer IO Socket
     open addr = liftIO $ E.bracketOnError (openSocket addr) close $ \sock -> do
         setSocketOption sock ReuseAddr 1
         withFdSocket sock setCloseOnExecIfNeeded
@@ -64,31 +50,33 @@ runTCPServer mhost port = do
         listen sock 1024
         return sock
 
-    loop :: TVar (ServerState IO) -> Socket -> IO a
+    close_ :: Socket -> BakamudServer IO ()
+    close_ = liftIO . close
+
+    loop :: ServerState IO -> Socket -> BakamudServer IO a
     loop serverState sock = do
       forever $ liftIO $ E.bracketOnError (liftIO $ accept sock) (liftIO . close . fst)
         $ connect_ serverState
 
-    connect_ :: TVar (ServerState IO) -> (Socket, SockAddr) -> IO ()
+    connect_ :: ServerState IO -> (Socket, SockAddr) -> IO ()
     connect_ serverState (conn, _peer) = void $ do
       -- 'forkFinally' alone is unlikely to fail thus leaking @conn@,
       -- but 'E.bracketOnError' above will be necessary if some
       -- non-atomic setups (e.g. spawning a subprocess to handle
       clientConnection <- initConnection serverState conn
-      ss <- readTVarIO serverState
-      let LogAction l = Log.getLogAction @_ @Text ss
+      let LogAction l = Log.getLogAction @_ @Text serverState
       l "Received Connection!"
       atomically $ TB.writeTBQueue (_connectionOutput clientConnection) "Welcome to BakaMUD!\n"
       _ <- forkFinally (output clientConnection) (const $ gracefulClose conn 5000)
       forkFinally (talk clientConnection) (const $ gracefulClose conn 5000)
 
-    initConnection :: TVar (ServerState IO) -> Socket -> IO Connection
+    initConnection :: ServerState IO -> Socket -> IO Connection
     initConnection serverState s = do
       inputQ <- newTBQueueIO 2
       outputQ <- newTBQueueIO 100
       let cid = ConnectionId 1
           connection = Connection Anonymous s inputQ outputQ
-      atomically $ modifyTVar serverState (addConnection cid connection)
+      -- atomically $ modifyTVar serverState (addConnection cid connection)
       pure connection
 
 talk :: Connection -> IO ()

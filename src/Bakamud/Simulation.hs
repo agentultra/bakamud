@@ -5,14 +5,17 @@ module Bakamud.Simulation where
 
 import Data.Foldable (traverse_)
 import Bakamud.Network.Connection
+import Bakamud.Server
 import Bakamud.Server.State
 import Control.Concurrent.STM
 import Control.Concurrent (threadDelay)
+import Control.Monad.IO.Class
+import Control.Monad.Reader
 
-simulation :: TVar (ServerState IO) -> IO ()
-simulation serverState = do
-  state <- atomically $ readTVar serverState
-  (`traverse_` (_serverStateConnections state)) $ \Connection {..} ->
+simulation :: MonadIO m => BakamudServer m ()
+simulation = do
+  state <- ask
+  liftIO $ (`traverse_` (_serverStateConnections state)) $ \Connection {..} ->
     atomically $ writeTBQueue _connectionOutput "Hello!\n"
-  threadDelay 3000000
-  simulation serverState
+  liftIO $ threadDelay 3000000
+  simulation
