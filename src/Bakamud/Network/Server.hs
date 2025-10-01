@@ -69,8 +69,9 @@ runTCPServer mhost port = do
     initConnection s = do
       inputQ <- liftIO $ newTBQueueIO 2
       outputQ <- liftIO $ newTBQueueIO 100
+      connectionId <- nextConnectionId
       let connection = Connection Anonymous s inputQ outputQ
-      addConnection (ConnectionId 0) connection
+      addConnection connectionId connection
       -- atomically $ modifyTVar serverState (addConnection cid connection)
       pure connection
 

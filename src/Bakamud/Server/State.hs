@@ -7,9 +7,11 @@ import Network.Socket
 
 data ServerState m
   = ServerState
-  { _serverStateHostName    :: Maybe HostName
-  , _serverStatePort        :: ServiceName
-  , _serverStateConnections :: TVar (Map ConnectionId Connection)
+  { _serverStateHostName         :: Maybe HostName
+  , _serverStatePort             :: ServiceName
+  , _serverStateConnectionLimit  :: Word
+  , _serverStateConnectionNextId :: TVar Word
+  , _serverStateConnections      :: TVar (Map ConnectionId Connection)
   }
 
 emptyServerState
@@ -18,10 +20,13 @@ emptyServerState
   -> ServiceName
   -> IO (ServerState m)
 emptyServerState mHostName serviceName = do
+  nextIdTVar <- newTVarIO 0
   serverStateTVar <- newTVarIO $ mempty
   pure
     $ ServerState
-    { _serverStateHostName    = mHostName
-    , _serverStatePort        = serviceName
-    , _serverStateConnections = serverStateTVar
+    { _serverStateHostName         = mHostName
+    , _serverStatePort             = serviceName
+    , _serverStateConnectionLimit  = 65535
+    , _serverStateConnectionNextId = nextIdTVar
+    , _serverStateConnections      = serverStateTVar
     }
