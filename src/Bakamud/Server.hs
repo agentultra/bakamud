@@ -1,7 +1,8 @@
 module Bakamud.Server where
 
-import Control.Monad.Reader
 import Bakamud.Server.State
+import Control.Monad.Reader
+import Data.Text (Text)
 
 newtype BakamudServer m a
   = BakamudServer

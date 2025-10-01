@@ -15,7 +15,8 @@ import Control.Monad.Reader
 simulation :: MonadIO m => BakamudServer m ()
 simulation = do
   state <- ask
-  liftIO $ (`traverse_` (_serverStateConnections state)) $ \Connection {..} ->
+  serverConnections <- liftIO . atomically . readTVar $ _serverStateConnections state
+  liftIO $ (`traverse_` serverConnections) $ \Connection {..} ->
     atomically $ writeTBQueue _connectionOutput "Hello!\n"
   liftIO $ threadDelay 3000000
   simulation
