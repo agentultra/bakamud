@@ -65,6 +65,7 @@ library
         Bakamud.Network.Connection
         Bakamud.Network.Server
         Bakamud.Server
+        Bakamud.Server.Client
         Bakamud.Server.State
         Bakamud.Simulation
 
