@@ -1,8 +1,10 @@
 module Bakamud.Server.State where
 
 import Bakamud.Network.Connection (ConnectionId, Connection)
+import Control.Concurrent.STM.TChan
 import Control.Concurrent.STM.TVar
 import Data.Map.Strict (Map)
+import Data.Text (Text)
 import Network.Socket
 
 data ServerState m
@@ -12,6 +14,7 @@ data ServerState m
   , _serverStateConnectionLimit  :: Word
   , _serverStateConnectionNextId :: TVar Word
   , _serverStateConnections      :: TVar (Map ConnectionId Connection)
+  , _serverStateBroadcastChannel :: TChan Text
   }
 
 emptyServerState
@@ -22,6 +25,7 @@ emptyServerState
 emptyServerState mHostName serviceName = do
   nextIdTVar <- newTVarIO 0
   serverStateTVar <- newTVarIO $ mempty
+  bchan <- newBroadcastTChanIO
   pure
     $ ServerState
     { _serverStateHostName         = mHostName
@@ -29,4 +33,5 @@ emptyServerState mHostName serviceName = do
     , _serverStateConnectionLimit  = 65535
     , _serverStateConnectionNextId = nextIdTVar
     , _serverStateConnections      = serverStateTVar
+    , _serverStateBroadcastChannel = bchan
     }

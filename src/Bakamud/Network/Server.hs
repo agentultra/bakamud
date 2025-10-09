@@ -19,6 +19,7 @@ import Control.Monad.Reader
 import qualified Data.ByteString as S
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
+import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
@@ -55,24 +56,24 @@ runTCPServer mhost port = do
 
     connect_ :: (Socket, SockAddr) -> BakamudServer IO ()
     connect_ (conn, _peer) = void $ do
+      bchan <- asks _serverStateBroadcastChannel
       -- 'forkFinally' alone is unlikely to fail thus leaking @conn@,
       -- but 'E.bracketOnError' above will be necessary if some
       -- non-atomic setups (e.g. spawning a subprocess to handle
-      clientConnection <- initConnection conn
-      --let LogAction l = Log.getLogAction @_ @Text serverState
+      clientConnection <- initConnection conn bchan
       liftIO $ putStrLn "Received Connection!"
       liftIO . atomically $ TB.writeTBQueue (_connectionOutput clientConnection) "Welcome to BakaMUD!\n"
       _ <- forkBakamud (output clientConnection) (const $ gracefulClose conn 5000)
       forkBakamud (talk clientConnection) (const $ gracefulClose conn 5000)
 
-    initConnection :: Socket -> BakamudServer IO Connection
-    initConnection s = do
+    initConnection :: Socket -> TChan Text -> BakamudServer IO Connection
+    initConnection s bchan = do
       inputQ <- liftIO $ newTBQueueIO 2
       outputQ <- liftIO $ newTBQueueIO 100
+      broadcastChan <- liftIO . atomically $ dupTChan bchan
       connectionId <- nextConnectionId
-      let connection = Connection Anonymous s inputQ outputQ
+      let connection = Connection Anonymous s inputQ outputQ broadcastChan
       addConnection connectionId connection
-      -- atomically $ modifyTVar serverState (addConnection cid connection)
       pure connection
 
 talk :: Connection -> BakamudServer IO ()
