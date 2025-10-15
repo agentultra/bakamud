@@ -66,6 +66,7 @@ library
         Bakamud.Network.Server
         Bakamud.Server
         Bakamud.Server.Client
+        Bakamud.Server.Command
         Bakamud.Server.State
         Bakamud.Simulation
 
@@ -80,6 +81,7 @@ library
         base ^>=4.18.3.0,
         bytestring,
         containers,
+        megaparsec == 9.7.0,
         mtl,
         network == 3.2.7.0,
         stm == 2.5.3.1,

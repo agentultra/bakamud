@@ -9,26 +9,34 @@ import Bakamud.Monad.Reader (bracketBakamudServer, bracketOnErrorBakamudServer, 
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
 import Bakamud.Server
 import Bakamud.Server.State
+import Bakamud.Server.Command
 import Bakamud.Simulation
 import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as TB
+import qualified Control.Concurrent.STM.TQueue as TQ
 import qualified Control.Exception as E
-import Control.Monad (forever, when, void)
+import Control.Monad (forever, when, void, forM_)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as Char8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import Data.Maybe (isJust, maybeToList)
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
+import qualified Text.Megaparsec as Parser
+
+import qualified Debug.Trace as Debug
 
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
     _ <- forkBakamud (simulation) (const $ pure ())
+    _ <- forkBakamud (commandDispatch) (const $ pure ())
     bracketBakamudServer (open addr) (close_) loop
   where
     resolve :: IO AddrInfo
@@ -61,13 +69,13 @@ runTCPServer mhost port = do
       -- 'forkFinally' alone is unlikely to fail thus leaking @conn@,
       -- but 'E.bracketOnError' above will be necessary if some
       -- non-atomic setups (e.g. spawning a subprocess to handle
-      clientConnection <- initConnection conn bchan
+      (clientConnectionId, clientConnection) <- initConnection conn bchan
       liftIO $ putStrLn "Received Connection!"
       liftIO . atomically $ TB.writeTBQueue (_connectionOutput clientConnection) "Welcome to BakaMUD!\n"
       _ <- forkBakamud (output clientConnection) (const $ gracefulClose conn 5000)
-      forkBakamud (talk clientConnection) (const $ gracefulClose conn 5000)
+      forkBakamud (talk clientConnectionId clientConnection) (const $ gracefulClose conn 5000)
 
-    initConnection :: Socket -> TChan Text -> BakamudServer IO Connection
+    initConnection :: Socket -> TChan Text -> BakamudServer IO (ConnectionId, Connection)
     initConnection s bchan = do
       inputQ <- liftIO $ newTBQueueIO 2
       outputQ <- liftIO $ newTBQueueIO 100
@@ -75,17 +83,21 @@ runTCPServer mhost port = do
       connectionId <- nextConnectionId
       let connection = Connection Anonymous s inputQ outputQ broadcastChan
       addConnection connectionId connection
-      pure connection
+      pure (connectionId, connection)
 
-talk :: Connection -> BakamudServer IO ()
-talk c@Connection {..} = do
+talk :: ConnectionId -> Connection -> BakamudServer IO ()
+talk connectionId c@Connection {..} = do
   msg <- liftIO $ recv _connectionSocket 1024
+  commandQ <- asks _serverStateCommandQueue
+  Debug.traceM $ "msg received: " ++ Char8.unpack msg
   when (not . S.null $ msg) . liftIO . atomically $ do
-    inputQFull <- TB.isFullTBQueue _connectionInput
-    if inputQFull
-      then TB.writeTBQueue _connectionOutput "Command input queue is full please wait and try again."
-      else TB.writeTBQueue _connectionInput $ T.decodeUtf8 msg
-  talk c
+    case Parser.parse commandP "" $ T.decodeUtf8 msg of
+      Left parseError -> do
+        let errMsg = T.pack $ Parser.errorBundlePretty parseError
+        TQ.writeTQueue commandQ (connectionId, HandleParseError errMsg)
+      Right command -> do
+        TQ.writeTQueue commandQ (connectionId, command)
+  talk connectionId c
 
 output :: Connection -> BakamudServer IO ()
 output c@Connection {..} = do
@@ -112,3 +124,10 @@ addConnection connectionId connection = do
     maybeAdd :: Maybe Connection -> Maybe Connection
     maybeAdd Nothing = Just connection
     maybeAdd (Just existingConnection) = Just existingConnection
+
+commandDispatch :: BakamudServer IO ()
+commandDispatch = do
+  commandQ <- asks _serverStateCommandQueue
+  commands <- liftIO . atomically $ TQ.flushTQueue commandQ
+  forM_ commands $ \command -> do
+    liftIO $ print command

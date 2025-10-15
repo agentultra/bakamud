@@ -1,0 +1,49 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+module Bakamud.Server.Command where
+
+import Data.Char
+import Data.Text (Text)
+import Data.Void
+import Text.Megaparsec
+import Text.Megaparsec.Char
+
+newtype Username = Username Text
+  deriving (Eq, Show)
+
+newtype Password = Password Text
+  deriving (Eq)
+
+instance Show Password where
+  show (Password _) = "(Password ***)"
+
+data Command
+  = Login Username Password
+  | Motd
+  | HandleParseError Text
+  | Unprocessed Text
+  deriving (Eq, Show)
+
+type Parser = Parsec Void Text
+
+commandP :: Parser Command
+commandP = try loginCommandP <|> try motdCommandP <|> unprocessedCommandP
+
+-- "/login fooo pass"
+loginCommandP :: Parser Command
+loginCommandP = do
+  _ <- string "/login"
+  _ <- spaceChar
+  username <- takeWhile1P Nothing isAlphaNum
+  passwd <- takeWhile1P Nothing isPrint
+  pure $ Login (Username username) (Password passwd)
+
+motdCommandP :: Parser Command
+motdCommandP = do
+  _ <- string "/motd"
+  pure $ Motd
+
+unprocessedCommandP :: Parser Command
+unprocessedCommandP = do
+  input <- takeWhile1P Nothing isPrint
+  pure $ Unprocessed input
