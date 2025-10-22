@@ -29,10 +29,10 @@ type Parser = Parsec Void Text
 commandP :: Parser Command
 commandP = try loginCommandP <|> try motdCommandP <|> unprocessedCommandP
 
--- "/login fooo pass"
+-- "login fooo pass"
 loginCommandP :: Parser Command
 loginCommandP = do
-  _ <- string "/login"
+  _ <- string "login"
   _ <- spaceChar
   username <- takeWhile1P Nothing isAlphaNum
   passwd <- takeWhile1P Nothing isPrint
@@ -40,7 +40,7 @@ loginCommandP = do
 
 motdCommandP :: Parser Command
 motdCommandP = do
-  _ <- string "/motd"
+  _ <- string "motd"
   pure $ Motd
 
 unprocessedCommandP :: Parser Command
