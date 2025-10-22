@@ -20,6 +20,7 @@ instance Show Password where
 data Command
   = Login Username Password
   | Motd
+  | Register Username Password
   | HandleParseError Text
   | Unprocessed Text
   deriving (Eq, Show)
@@ -27,7 +28,11 @@ data Command
 type Parser = Parsec Void Text
 
 commandP :: Parser Command
-commandP = try loginCommandP <|> try motdCommandP <|> unprocessedCommandP
+commandP
+  = try loginCommandP
+  <|> try registerCommandP
+  <|> try motdCommandP
+  <|> unprocessedCommandP
 
 -- "login fooo pass"
 loginCommandP :: Parser Command
@@ -42,6 +47,14 @@ motdCommandP :: Parser Command
 motdCommandP = do
   _ <- string "motd"
   pure $ Motd
+
+registerCommandP :: Parser Command
+registerCommandP = do
+  _ <- string "register"
+  _ <- spaceChar
+  username <- takeWhile1P Nothing isAlphaNum
+  password <- takeWhile1P Nothing isPrint
+  pure $ Register (Username username) (Password password)
 
 unprocessedCommandP :: Parser Command
 unprocessedCommandP = do
