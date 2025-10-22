@@ -30,8 +30,6 @@ import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
 
-import qualified Debug.Trace as Debug
-
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
@@ -89,7 +87,7 @@ talk :: ConnectionId -> Connection -> BakamudServer IO ()
 talk connectionId c@Connection {..} = do
   msg <- liftIO $ recv _connectionSocket 1024
   commandQ <- asks _serverStateCommandQueue
-  Debug.traceM $ "msg received: " ++ Char8.unpack msg
+
   when (not . S.null $ msg) . liftIO . atomically $ do
     case Parser.parse commandP "" $ T.decodeUtf8 msg of
       Left parseError -> do
@@ -131,3 +129,4 @@ commandDispatch = do
   commands <- liftIO . atomically $ TQ.flushTQueue commandQ
   forM_ commands $ \command -> do
     liftIO $ print command
+  commandDispatch
