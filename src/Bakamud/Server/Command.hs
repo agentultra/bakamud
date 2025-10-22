@@ -40,6 +40,7 @@ loginCommandP = do
   _ <- string "login"
   _ <- spaceChar
   username <- takeWhile1P Nothing isAlphaNum
+  _ <- spaceChar
   passwd <- takeWhile1P Nothing isPrint
   pure $ Login (Username username) (Password passwd)
 
@@ -53,6 +54,7 @@ registerCommandP = do
   _ <- string "register"
   _ <- spaceChar
   username <- takeWhile1P Nothing isAlphaNum
+  _ <- spaceChar
   password <- takeWhile1P Nothing isPrint
   pure $ Register (Username username) (Password password)
 

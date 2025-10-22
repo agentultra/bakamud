@@ -48,7 +48,16 @@ handleLogin connectionId user pass = do
 data ChallengeResult = ChallengeSuccess | ChallengeFail deriving (Eq, Show)
 
 challenge :: MonadIO m => Username -> Password -> BakamudServer m ChallengeResult
-challenge _ _ = pure ChallengeSuccess
+challenge username password = do
+  accountsTVar <- asks _serverStateAccounts
+  liftIO . atomically $ do
+    accounts <- readTVar accountsTVar
+    case Map.lookup username accounts of
+      Nothing -> pure ChallengeFail
+      Just p  ->
+        if p == password
+        then pure ChallengeSuccess
+        else pure ChallengeFail
 
 data RegistrationResult
   = RegistrationSucceeded
@@ -75,4 +84,5 @@ handleRegister connectionId user pass = do
     RegistrationSucceeded -> put connectionId "Registration succeeded!\n"
   where
     addAccount :: Username -> Password -> Map Username Password -> Map Username Password
-    addAccount = undefined
+    addAccount username password accounts =
+      Map.insert username password accounts
