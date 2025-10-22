@@ -9,7 +9,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 
 newtype Username = Username Text
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 newtype Password = Password Text
   deriving (Eq)

@@ -18,6 +18,7 @@ data ServerState m
   , _serverStateConnections      :: TVar (Map ConnectionId Connection)
   , _serverStateBroadcastChannel :: TChan Text
   , _serverStateCommandQueue     :: TQueue (ConnectionId, Command)
+  , _serverStateAccounts         :: TVar (Map Username Password)
   }
 
 emptyServerState
@@ -28,6 +29,7 @@ emptyServerState
 emptyServerState mHostName serviceName = do
   nextIdTVar <- newTVarIO 0
   serverStateTVar <- newTVarIO $ mempty
+  serverStateAccounts <- newTVarIO $ mempty
   bchan <- newBroadcastTChanIO
   commandQ <- newTQueueIO
   pure
@@ -39,4 +41,5 @@ emptyServerState mHostName serviceName = do
     , _serverStateConnections      = serverStateTVar
     , _serverStateBroadcastChannel = bchan
     , _serverStateCommandQueue     = commandQ
+    , _serverStateAccounts         = serverStateAccounts
     }

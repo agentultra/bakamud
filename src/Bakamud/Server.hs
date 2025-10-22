@@ -11,6 +11,7 @@ import Bakamud.Server.State
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 nextConnectionId :: MonadIO m => BakamudServer m ConnectionId
@@ -26,6 +27,7 @@ dispatchCommand (connectionId, command) =
   case command of
     Motd -> put connectionId "THIS IS THE MOTD\n"
     Login user pass -> handleLogin connectionId user pass
+    Register user pass -> handleRegister connectionId user pass
     _ -> liftIO $ print (connectionId, command)
 
 handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServer m ()
@@ -47,3 +49,30 @@ data ChallengeResult = ChallengeSuccess | ChallengeFail deriving (Eq, Show)
 
 challenge :: MonadIO m => Username -> Password -> BakamudServer m ChallengeResult
 challenge _ _ = pure ChallengeSuccess
+
+data RegistrationResult
+  = RegistrationSucceeded
+  | RegistrationFailed
+  deriving (Eq, Show)
+
+handleRegister
+  :: MonadIO m
+  => ConnectionId
+  -> Username
+  -> Password
+  -> BakamudServer m ()
+handleRegister connectionId user pass = do
+  accountsTVar <- asks _serverStateAccounts
+  result <- liftIO . atomically $ do
+    accounts <- readTVar accountsTVar
+    case Map.lookup user accounts of
+      Just _ -> pure RegistrationFailed
+      Nothing -> do
+        writeTVar accountsTVar $ addAccount user pass accounts
+        pure RegistrationSucceeded
+  case result of
+    RegistrationFailed -> put connectionId "Username already in use, try another one.\n"
+    RegistrationSucceeded -> put connectionId "Registration succeeded!\n"
+  where
+    addAccount :: Username -> Password -> Map Username Password -> Map Username Password
+    addAccount = undefined
