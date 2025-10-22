@@ -1,6 +1,6 @@
 module Bakamud.Monad.Reader where
 
-import Bakamud.Server
+import Bakamud.Server.Monad
 import Control.Concurrent
 import Control.Exception
 import Control.Monad.Reader

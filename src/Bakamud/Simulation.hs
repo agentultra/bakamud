@@ -3,7 +3,7 @@
 
 module Bakamud.Simulation where
 
-import Bakamud.Server
+import Bakamud.Server.Monad
 import Bakamud.Server.Client
 import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class

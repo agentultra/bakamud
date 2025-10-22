@@ -67,6 +67,7 @@ library
         Bakamud.Server
         Bakamud.Server.Client
         Bakamud.Server.Command
+        Bakamud.Server.Monad
         Bakamud.Server.State
         Bakamud.Simulation
 

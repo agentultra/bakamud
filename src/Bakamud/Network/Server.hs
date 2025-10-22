@@ -8,6 +8,7 @@ import Bakamud.Auth
 import Bakamud.Monad.Reader (bracketBakamudServer, bracketOnErrorBakamudServer, forkBakamud)
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
 import Bakamud.Server
+import Bakamud.Server.Monad
 import Bakamud.Server.State
 import Bakamud.Server.Command
 import Bakamud.Simulation
@@ -19,7 +20,6 @@ import Control.Monad (forever, when, void, forM_)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.ByteString as S
-import qualified Data.ByteString.Char8 as Char8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import Data.Maybe (isJust, maybeToList)
@@ -128,5 +128,5 @@ commandDispatch = do
   commandQ <- asks _serverStateCommandQueue
   commands <- liftIO . atomically $ TQ.flushTQueue commandQ
   forM_ commands $ \command -> do
-    liftIO $ print command
+    dispatchCommand command
   commandDispatch

@@ -1,7 +1,7 @@
 module Main where
 
 import Bakamud.Network.Server
-import Bakamud.Server
+import Bakamud.Server.Monad
 import Bakamud.Server.State
 
 main :: IO ()
