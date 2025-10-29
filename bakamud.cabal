@@ -68,6 +68,7 @@ library
         Bakamud.Server.Client
         Bakamud.Server.Command
         Bakamud.Server.Monad
+        Bakamud.Server.MudCode
         Bakamud.Server.State
         Bakamud.Simulation
 
@@ -82,6 +83,7 @@ library
         base ^>=4.18.3.0,
         bytestring,
         containers,
+        lua == 2.3.3,
         megaparsec == 9.7.0,
         mtl,
         network == 3.2.7.0,

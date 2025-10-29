@@ -19,14 +19,17 @@ data ServerState m
   , _serverStateBroadcastChannel :: TChan Text
   , _serverStateCommandQueue     :: TQueue (ConnectionId, Command)
   , _serverStateAccounts         :: TVar (Map Username Password)
+  , _serverStateMudMainPath      :: FilePath
+  -- ^ Path to main user MUD-code module to run simulation
   }
 
 emptyServerState
   :: Monad m
   => Maybe HostName
   -> ServiceName
+  -> FilePath
   -> IO (ServerState m)
-emptyServerState mHostName serviceName = do
+emptyServerState mHostName serviceName mudMainPath = do
   nextIdTVar <- newTVarIO 0
   serverStateTVar <- newTVarIO $ mempty
   serverStateAccounts <- newTVarIO $ mempty
@@ -42,4 +45,5 @@ emptyServerState mHostName serviceName = do
     , _serverStateBroadcastChannel = bchan
     , _serverStateCommandQueue     = commandQ
     , _serverStateAccounts         = serverStateAccounts
+    , _serverStateMudMainPath      = mudMainPath
     }
