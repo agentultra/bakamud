@@ -6,8 +6,11 @@ module Bakamud.Simulation where
 
 import Bakamud.Server.Monad
 import Bakamud.Server.MudCode
+import Bakamud.Server.State
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM
 import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Lua
 import Foreign.C.String
 import Foreign.C.Types
@@ -15,15 +18,15 @@ import Foreign.C.Types
 simulation :: MonadIO m => BakamudServer m ()
 simulation = do
   mudMainModule <- loadMain
-  liftIO $ print mudMainModule
-  liftIO $ withNewState $ \l -> do
-    luaL_openlibs l
-    withCString "main" $ \name -> do
-      (codePtr, codeLen) <- newCStringLen mudMainModule
-      result <- luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
-      if result /= LUA_OK
-        then error "Error loading MUD code, aborting..."
-        else tick l
+  lTVar <- asks _serverStateLuaInterpreterState
+  l <- liftIO . atomically $ readTVar lTVar
+  liftIO $ luaL_openlibs l
+  liftIO $ withCString "main" $ \name -> do
+    (codePtr, codeLen) <- newCStringLen mudMainModule
+    result <- luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
+    if result /= LUA_OK
+      then error "Error loading MUD code, aborting..."
+      else tick l
 
 tick :: State -> IO ()
 tick l = do

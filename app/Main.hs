@@ -6,5 +6,5 @@ import Bakamud.Server.State
 
 main :: IO ()
 main = do
-  initialState <- emptyServerState Nothing "3000" "main.lua"
+  initialState <- initServerState Nothing "3000" "main.lua"
   runBakamudServer initialState (runTCPServer Nothing "3000")

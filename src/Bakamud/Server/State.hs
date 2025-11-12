@@ -9,6 +9,8 @@ import Data.Int
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Time.Clock.System
+import Lua (State)
+import qualified Lua.Ersatz.Auxiliary as Lua
 import Network.Socket
 
 data ServerState m
@@ -22,25 +24,28 @@ data ServerState m
   , _serverStateCommandQueue        :: TQueue (ConnectionId, Command)
   , _serverStateAccounts            :: TVar (Map Username Password)
   , _serverStateMudMainPath         :: FilePath
+  , _serverStateLuaInterpreterState :: TVar State
   , _serverStateSimStartTime        :: Int64
   , _serverStateSimTimeRate         :: Int -- ^ How many ms to accumulate before tick, ie: 100ms = 10 ticks/s
   , _serverStateSimDeltaTimeAccumMs :: Int
   -- ^ Path to main user MUD-code module to run simulation
   }
 
-emptyServerState
+initServerState
   :: Monad m
   => Maybe HostName
   -> ServiceName
   -> FilePath
   -> IO (ServerState m)
-emptyServerState mHostName serviceName mudMainPath = do
+initServerState mHostName serviceName mudMainPath = do
   nextIdTVar <- newTVarIO 0
   serverStateTVar <- newTVarIO $ mempty
   serverStateAccounts <- newTVarIO $ mempty
   bchan <- newBroadcastTChanIO
   commandQ <- newTQueueIO
   startTime <- getSystemTime
+  luaState <- Lua.hsluaL_newstate
+  luaStateTVar <- newTVarIO luaState
   pure
     $ ServerState
     { _serverStateHostName            = mHostName
@@ -52,6 +57,7 @@ emptyServerState mHostName serviceName mudMainPath = do
     , _serverStateCommandQueue        = commandQ
     , _serverStateAccounts            = serverStateAccounts
     , _serverStateMudMainPath         = mudMainPath
+    , _serverStateLuaInterpreterState = luaStateTVar
     , _serverStateSimStartTime        = systemSeconds startTime
     , _serverStateSimTimeRate         = 100 -- TODO: set this
     , _serverStateSimDeltaTimeAccumMs = 0
