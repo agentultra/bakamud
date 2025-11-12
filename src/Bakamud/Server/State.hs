@@ -25,7 +25,7 @@ data ServerState m
   , _serverStateAccounts            :: TVar (Map Username Password)
   , _serverStateMudMainPath         :: FilePath
   , _serverStateLuaInterpreterState :: TVar State
-  , _serverStateSimStartTime        :: Int64
+  , _serverStateSimLastTime         :: TVar Int64
   , _serverStateSimTimeRate         :: Int64 -- ^ How many ms to accumulate before tick, ie: 100ms = 10 ticks/s
   , _serverStateSimDeltaTimeAccumMs :: TVar Int64
   -- ^ Path to main user MUD-code module to run simulation
@@ -44,6 +44,7 @@ initServerState mHostName serviceName mudMainPath = do
   bchan <- newBroadcastTChanIO
   commandQ <- newTQueueIO
   startTime <- getSystemTime
+  startTimeTVar <- newTVarIO $ systemSeconds startTime
   luaState <- Lua.hsluaL_newstate
   luaStateTVar <- newTVarIO luaState
   deltaTimeAccumTVar <- newTVarIO 0
@@ -59,7 +60,7 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStateAccounts            = serverStateAccounts
     , _serverStateMudMainPath         = mudMainPath
     , _serverStateLuaInterpreterState = luaStateTVar
-    , _serverStateSimStartTime        = systemSeconds startTime
-    , _serverStateSimTimeRate         = 100 -- TODO: set this
+    , _serverStateSimLastTime         = startTimeTVar
+    , _serverStateSimTimeRate         = 1 -- TODO: set this
     , _serverStateSimDeltaTimeAccumMs = deltaTimeAccumTVar
     }

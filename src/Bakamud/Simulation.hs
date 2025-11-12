@@ -17,6 +17,8 @@ import qualified Lua as Lua
 import Foreign.C.String
 import Foreign.C.Types
 
+import qualified Debug.Trace as Debug
+
 simulation :: MonadIO m => BakamudServer m ()
 simulation = do
   mudMainModule <- loadMain
@@ -32,18 +34,31 @@ simulation = do
 
 tick :: MonadIO m => Lua.State -> BakamudServer m ()
 tick l = do
-  startTime <- asks _serverStateSimStartTime
+  --Debug.traceM "Begin tick..."
+  lastTimeTVar <- asks _serverStateSimLastTime
+  lastTime <- liftIO . atomically $ readTVar lastTimeTVar
   timeRate <- asks _serverStateSimTimeRate
   currTime <- systemSeconds <$> liftIO getSystemTime
   accTimeTVar <- asks _serverStateSimDeltaTimeAccumMs
   accTime <- liftIO . atomically . readTVar $ accTimeTVar
-  let dt = currTime - startTime
+  let dt = currTime - lastTime
   when (accTime + dt > timeRate) $ do
-    _ <- liftIO $ Lua.lua_pcall l (Lua.NumArgs 0) (Lua.NumResults 0) (Lua.StackIndex 0)
-    pure ()
+    Debug.traceM $ "Tick! " ++ show accTime
+    -- _ <- liftIO $ Lua.lua_pcall l (Lua.NumArgs 0) (Lua.NumResults 0) (Lua.StackIndex 0)
+    resetAccTime accTimeTVar
+  updateLastTime lastTimeTVar
   accumulateDt dt accTimeTVar
+  --Debug.traceM "End tick..."
   tick l
   where
+    resetAccTime :: MonadIO m => TVar Int64 -> BakamudServer m ()
+    resetAccTime accTimeTVar = liftIO . atomically $ writeTVar accTimeTVar 0
+
+    updateLastTime :: MonadIO m => TVar Int64 -> BakamudServer m ()
+    updateLastTime lastTimeTVar = do
+      newTime <- liftIO getSystemTime
+      liftIO . atomically . writeTVar lastTimeTVar $ systemSeconds newTime
+
     accumulateDt :: MonadIO m => Int64 -> TVar Int64 -> BakamudServer m ()
     accumulateDt dt accTimeTVar = liftIO . atomically $ do
       modifyTVar' accTimeTVar $ \accTime -> accTime + dt
