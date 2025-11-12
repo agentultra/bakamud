@@ -88,7 +88,8 @@ library
         mtl,
         network == 3.2.7.0,
         stm == 2.5.3.1,
-        text
+        text,
+        time == 1.14
 
     -- Directories containing source files.
     hs-source-dirs:   src
