@@ -7,11 +7,13 @@ module Bakamud.Simulation where
 import Bakamud.Server.Monad
 import Bakamud.Server.MudCode
 import Bakamud.Server.State
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Lua
+import Data.Int
+import Data.Time.Clock.System
+import qualified Lua as Lua
 import Foreign.C.String
 import Foreign.C.Types
 
@@ -20,16 +22,28 @@ simulation = do
   mudMainModule <- loadMain
   lTVar <- asks _serverStateLuaInterpreterState
   l <- liftIO . atomically $ readTVar lTVar
-  liftIO $ luaL_openlibs l
-  liftIO $ withCString "main" $ \name -> do
+  liftIO $ Lua.luaL_openlibs l
+  result <- liftIO $ withCString "main" $ \name -> do
     (codePtr, codeLen) <- newCStringLen mudMainModule
-    result <- luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
-    if result /= LUA_OK
-      then error "Error loading MUD code, aborting..."
-      else tick l
+    Lua.luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
+  if result /= Lua.LUA_OK
+    then error "Error loading MUD code, aborting..."
+    else tick l
 
-tick :: State -> IO ()
+tick :: MonadIO m => Lua.State -> BakamudServer m ()
 tick l = do
-  _ <- lua_pcall l (NumArgs 0) (NumResults 0) (StackIndex 0)
-  threadDelay 3000000
+  startTime <- asks _serverStateSimStartTime
+  timeRate <- asks _serverStateSimTimeRate
+  currTime <- systemSeconds <$> liftIO getSystemTime
+  accTimeTVar <- asks _serverStateSimDeltaTimeAccumMs
+  accTime <- liftIO . atomically . readTVar $ accTimeTVar
+  let dt = currTime - startTime
+  when (accTime + dt > timeRate) $ do
+    _ <- liftIO $ Lua.lua_pcall l (Lua.NumArgs 0) (Lua.NumResults 0) (Lua.StackIndex 0)
+    pure ()
+  accumulateDt dt accTimeTVar
   tick l
+  where
+    accumulateDt :: MonadIO m => Int64 -> TVar Int64 -> BakamudServer m ()
+    accumulateDt dt accTimeTVar = liftIO . atomically $ do
+      modifyTVar' accTimeTVar $ \accTime -> accTime + dt

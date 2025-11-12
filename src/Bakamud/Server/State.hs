@@ -26,8 +26,8 @@ data ServerState m
   , _serverStateMudMainPath         :: FilePath
   , _serverStateLuaInterpreterState :: TVar State
   , _serverStateSimStartTime        :: Int64
-  , _serverStateSimTimeRate         :: Int -- ^ How many ms to accumulate before tick, ie: 100ms = 10 ticks/s
-  , _serverStateSimDeltaTimeAccumMs :: Int
+  , _serverStateSimTimeRate         :: Int64 -- ^ How many ms to accumulate before tick, ie: 100ms = 10 ticks/s
+  , _serverStateSimDeltaTimeAccumMs :: TVar Int64
   -- ^ Path to main user MUD-code module to run simulation
   }
 
@@ -46,6 +46,7 @@ initServerState mHostName serviceName mudMainPath = do
   startTime <- getSystemTime
   luaState <- Lua.hsluaL_newstate
   luaStateTVar <- newTVarIO luaState
+  deltaTimeAccumTVar <- newTVarIO 0
   pure
     $ ServerState
     { _serverStateHostName            = mHostName
@@ -60,5 +61,5 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStateLuaInterpreterState = luaStateTVar
     , _serverStateSimStartTime        = systemSeconds startTime
     , _serverStateSimTimeRate         = 100 -- TODO: set this
-    , _serverStateSimDeltaTimeAccumMs = 0
+    , _serverStateSimDeltaTimeAccumMs = deltaTimeAccumTVar
     }
