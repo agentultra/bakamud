@@ -35,10 +35,11 @@ simulation = do
 tick :: MonadIO m => Lua.State -> BakamudServer m ()
 tick l = do
   --Debug.traceM "Begin tick..."
+  currTimeNano <- systemNanoseconds <$> liftIO getSystemTime
+  let currTime = fromIntegral $ currTimeNano `div` 1_000_000
   lastTimeTVar <- asks _serverStateSimLastTime
   lastTime <- liftIO . atomically $ readTVar lastTimeTVar
   timeRate <- asks _serverStateSimTimeRate
-  currTime <- systemSeconds <$> liftIO getSystemTime
   accTimeTVar <- asks _serverStateSimDeltaTimeAccumMs
   accTime <- liftIO . atomically . readTVar $ accTimeTVar
   let dt = currTime - lastTime
@@ -46,7 +47,7 @@ tick l = do
     Debug.traceM $ "Tick! " ++ show accTime
     -- _ <- liftIO $ Lua.lua_pcall l (Lua.NumArgs 0) (Lua.NumResults 0) (Lua.StackIndex 0)
     resetAccTime accTimeTVar
-  updateLastTime lastTimeTVar
+  setLastTime lastTimeTVar currTime
   accumulateDt dt accTimeTVar
   --Debug.traceM "End tick..."
   tick l
@@ -54,11 +55,13 @@ tick l = do
     resetAccTime :: MonadIO m => TVar Int64 -> BakamudServer m ()
     resetAccTime accTimeTVar = liftIO . atomically $ writeTVar accTimeTVar 0
 
-    updateLastTime :: MonadIO m => TVar Int64 -> BakamudServer m ()
-    updateLastTime lastTimeTVar = do
-      newTime <- liftIO getSystemTime
-      liftIO . atomically . writeTVar lastTimeTVar $ systemSeconds newTime
+    setLastTime :: MonadIO m => TVar Int64 -> Int64 -> BakamudServer m ()
+    setLastTime lastTimeTVar time = do
+      liftIO . atomically . writeTVar lastTimeTVar $ time
 
     accumulateDt :: MonadIO m => Int64 -> TVar Int64 -> BakamudServer m ()
-    accumulateDt dt accTimeTVar = liftIO . atomically $ do
-      modifyTVar' accTimeTVar $ \accTime -> accTime + dt
+    accumulateDt dt accTimeTVar = do
+      when (dt > 0) $
+        Debug.traceM $ "accumulateDt: " ++ show dt
+      liftIO . atomically $ do
+        modifyTVar' accTimeTVar $ \accTime -> accTime + dt
