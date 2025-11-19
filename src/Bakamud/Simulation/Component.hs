@@ -7,9 +7,9 @@ import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 
-data LType = LInt | LNum | LString deriving (Eq, Show)
+data DType = DInt | DNum | DString deriving (Eq, Show)
 
-newtype Definition = Definition (Map Text LType)
+newtype Definition = Definition (Map Text DType)
   deriving (Eq, Show)
 
 data Value = VInt Int | VNum Float | VString Text deriving (Eq, Show)
@@ -21,10 +21,10 @@ newtype Component = Component (Map Text Value)
 
 data TypeCheck = Match | Fail deriving (Eq, Show)
 
-typeCheck :: LType -> Value -> TypeCheck
-typeCheck LInt (VInt _) = Match
-typeCheck LNum (VNum _) = Match
-typeCheck LString (VString _) = Match
+typeCheck :: DType -> Value -> TypeCheck
+typeCheck DInt (VInt _) = Match
+typeCheck DNum (VNum _) = Match
+typeCheck DString (VString _) = Match
 typeCheck _ _ = Fail
 
 instantiate :: Definition -> ComponentValues -> Either Text Component
