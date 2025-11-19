@@ -3,9 +3,14 @@
 module Bakamud.Simulation.Component where
 
 import Control.Error.Util
+import Data.Char
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Map.Strict as Map
+import Data.Void
+import Text.Megaparsec
+import Text.Megaparsec.Char
 
 data DType = DInt | DNum | DString deriving (Eq, Show)
 
@@ -35,3 +40,24 @@ instantiate (Definition definitions) componentValues = do
       Fail -> Left "Invalid type for instantiation"
       Match -> pure val
   pure $ Component instantiatedValues
+
+type Parser = Parsec Void Text
+
+definitionP :: Parser (Text, Definition)
+definitionP = do
+  skipMany space
+  labelStr <- someTill (satisfy isAlphaNum) eol
+  skipMany space
+  _ <- string "{"
+  defs <- manyTill defP endDefP
+
+  pure
+    ( Text.pack labelStr
+    , Definition $ Map.fromList defs
+    )
+
+defP :: Parser (Text, DType)
+defP = undefined
+
+endDefP :: Parser ()
+endDefP = undefined
