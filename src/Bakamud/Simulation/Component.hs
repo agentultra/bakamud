@@ -1,0 +1,37 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+module Bakamud.Simulation.Component where
+
+import Control.Error.Util
+import Data.Map.Strict (Map)
+import Data.Text (Text)
+import qualified Data.Map.Strict as Map
+
+data LType = LInt | LNum | LString deriving (Eq, Show)
+
+newtype Definition = Definition (Map Text LType)
+  deriving (Eq, Show)
+
+data Value = VInt Int | VNum Float | VString Text deriving (Eq, Show)
+
+type ComponentValues = Map Text Value
+
+newtype Component = Component (Map Text Value)
+  deriving (Eq, Show)
+
+data TypeCheck = Match | Fail deriving (Eq, Show)
+
+typeCheck :: LType -> Value -> TypeCheck
+typeCheck LInt (VInt _) = Match
+typeCheck LNum (VNum _) = Match
+typeCheck LString (VString _) = Match
+typeCheck _ _ = Fail
+
+instantiate :: Definition -> ComponentValues -> Either Text Component
+instantiate (Definition definitions) componentValues = do
+  instantiatedValues <- (`Map.traverseWithKey` componentValues) $ \key val -> do
+    defType <- note "Missing definition key" $ Map.lookup key definitions
+    case typeCheck defType val of
+      Fail -> Left "Invalid type for instantiation"
+      Match -> pure val
+  pure $ Component instantiatedValues
