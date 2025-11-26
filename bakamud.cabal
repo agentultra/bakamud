@@ -85,6 +85,7 @@ library
         bytestring,
         containers,
         errors == 2.3.0,
+        language-lua == 0.11.0.2,
         lua == 2.3.3,
         megaparsec == 9.7.0,
         mtl,
