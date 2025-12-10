@@ -5,6 +5,7 @@ import Bakamud.Server.Command
 import Control.Concurrent.STM.TChan
 import Control.Concurrent.STM.TQueue
 import Control.Concurrent.STM.TVar
+import Control.Monad
 import Data.Int
 import Data.Map.Strict (Map)
 import Data.Text (Text)
@@ -12,6 +13,7 @@ import Data.Time.Clock.System
 import Lua (State)
 import qualified Lua.Ersatz.Auxiliary as Lua
 import Network.Socket
+import System.Directory
 
 data ServerState m
   = ServerState
@@ -38,6 +40,9 @@ initServerState
   -> FilePath
   -> IO (ServerState m)
 initServerState mHostName serviceName mudMainPath = do
+  mudMainPathExists <- doesDirectoryExist mudMainPath
+  when (not $ mudMainPathExists) $
+    error $ "Invalid mud code directory: " ++ mudMainPath
   nextIdTVar <- newTVarIO 0
   serverStateTVar <- newTVarIO $ mempty
   serverStateAccounts <- newTVarIO $ mempty
