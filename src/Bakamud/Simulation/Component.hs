@@ -1,16 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Bakamud.Simulation.Component where
 
 import Control.Error.Util
-import Data.Char
+import Data.Char (isPunctuation)
 import Data.Map.Strict (Map)
-import Data.Text (Text)
-import qualified Data.Text as Text
+import Data.Text (Text, dropAround)
 import qualified Data.Map.Strict as Map
-import Data.Void
-import Text.Megaparsec
-import Text.Megaparsec.Char
+import qualified Language.Lua.Annotated.Lexer as Lua
+import qualified Language.Lua.Parser as Lua
+import qualified Language.Lua.Syntax as Lua
 
 data DType = DInt | DNum | DString deriving (Eq, Show)
 
@@ -41,23 +41,34 @@ instantiate (Definition definitions) componentValues = do
       Match -> pure val
   pure $ Component instantiatedValues
 
-type Parser = Parsec Void Text
+data ComponentDefinitionError
+  = ComponentDefinitionParseError (Lua.SourceRange, String)
+  | ComponentDefinitionInterpretError Text
+  | ComponentDefinitionTypeError Text
+  deriving (Eq, Show)
 
-definitionP :: Parser (Text, Definition)
-definitionP = do
-  skipMany space
-  labelStr <- someTill (satisfy isAlphaNum) eol
-  skipMany space
-  _ <- string "{"
-  defs <- manyTill defP endDefP
+parseDefinition :: Text -> Either ComponentDefinitionError (Text, Definition)
+parseDefinition luaCode = do
+  let parsed = Lua.parseText Lua.stat luaCode
+  case parsed of
+    Right (Lua.Assign [Lua.VarName (Lua.Name label)] [Lua.TableConst fields]) -> do
+      fieldMap <- traverse getField fields
+      let defMap = Definition $ Map.fromList fieldMap
+      pure (label, defMap)
+    Right _ -> Left $ ComponentDefinitionInterpretError "Invalid Lua Definition" -- TODO better error msg
+    Left parseErr -> Left $ ComponentDefinitionParseError parseErr
+  where
+    getField :: Lua.TableField -> Either ComponentDefinitionError (Text, DType)
+    getField (Lua.ExpField (Lua.String name) (Lua.String val)) = do
+      dType <- parseFieldType val
+      pure (strip name, dType)
+    getField _ = Left $ ComponentDefinitionInterpretError "Invalid Lua field definition" -- TODO better erro msg
 
-  pure
-    ( Text.pack labelStr
-    , Definition $ Map.fromList defs
-    )
+    strip :: Text -> Text
+    strip = dropAround isPunctuation
 
-defP :: Parser (Text, DType)
-defP = undefined
-
-endDefP :: Parser ()
-endDefP = undefined
+parseFieldType :: Text -> Either ComponentDefinitionError DType
+parseFieldType "\"int\"" = pure DInt
+parseFieldType "\"str\"" = pure DString
+parseFieldType "\"num\"" = pure DNum
+parseFieldType other = Left . ComponentDefinitionTypeError $ "Unknown component definition type: " <> other

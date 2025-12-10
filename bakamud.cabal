@@ -72,6 +72,7 @@ library
         Bakamud.Server.State
         Bakamud.Simulation
         Bakamud.Simulation.Component
+        Bakamud.Simulation.Space
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -85,6 +86,7 @@ library
         bytestring,
         containers,
         errors == 2.3.0,
+        language-lua == 0.11.0.2,
         lua == 2.3.3,
         megaparsec == 9.7.0,
         mtl,
