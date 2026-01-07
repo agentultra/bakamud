@@ -17,6 +17,7 @@ import qualified Lua as Lua
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
+import Foreign.Ptr
 
 simulation :: MonadIO m => BakamudServer m ()
 simulation = do
@@ -25,7 +26,8 @@ simulation = do
   l <- liftIO . atomically $ readTVar lTVar
   liftIO $ do
     Lua.hslua_pushhsfunction l echo
-    withCString "echo" (Lua.lua_setglobal l)
+    withCStringLen "echo" $ \(funName, funNameLen) ->
+      Lua.hslua_setglobal l funName (CSize $ fromIntegral funNameLen) nullPtr
     Lua.luaL_openlibs l
   result <- liftIO $ withCString "main" $ \name -> do
     (codePtr, codeLen) <- newCStringLen mudMainModule
