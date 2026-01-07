@@ -25,6 +25,7 @@ simulation = do
   l <- liftIO . atomically $ readTVar lTVar
   liftIO $ do
     Lua.hslua_pushhsfunction l echo
+    withCString "echo" (Lua.lua_setglobal l)
     Lua.luaL_openlibs l
   result <- liftIO $ withCString "main" $ \name -> do
     (codePtr, codeLen) <- newCStringLen mudMainModule

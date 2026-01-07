@@ -17,7 +17,7 @@ loadMain = do
 
 echo :: PreCFunction
 echo state = do
-  s <- lua_tolstring state (nthBottom 1) nullPtr
+  s <- lua_tolstring state (nthTop 1) nullPtr
   fromLua <- peekCString s
   withCStringLen ("Hello from Haskell: " ++ fromLua) $ \(cStr, cStrLen) ->
     lua_pushlstring state cStr (CSize $ fromIntegral cStrLen)
