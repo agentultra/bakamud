@@ -3,11 +3,15 @@ module Bakamud.Network.Connection where
 import Bakamud.Auth
 import Control.Concurrent.STM.TBQueue (TBQueue)
 import Control.Concurrent.STM.TChan (TChan)
+import Data.Hashable
 import Data.Text (Text)
+import GHC.Generics
 import Network.Socket (Socket)
 
 newtype ConnectionId = ConnectionId { getConnectionId :: Integer }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Generic, Ord, Show)
+
+instance Hashable ConnectionId
 
 data Connection
   = Connection

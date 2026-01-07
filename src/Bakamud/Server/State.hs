@@ -20,6 +20,7 @@ import Data.Time.Clock.System
 import Lua (State)
 import qualified Lua.Ersatz.Auxiliary as Lua
 import Network.Socket
+import qualified StmContainers.Map as SMap
 import System.FilePath
 import System.Directory
 
@@ -29,7 +30,7 @@ data ServerState m
   , _serverStatePort                :: ServiceName
   , _serverStateConnectionLimit     :: Word
   , _serverStateConnectionNextId    :: TVar Word
-  , _serverStateConnections         :: TVar (Map ConnectionId Connection)
+  , _serverStateConnections         :: SMap.Map ConnectionId Connection
   , _serverStateBroadcastChannel    :: TChan Text
   , _serverStateCommandQueue        :: TQueue (ConnectionId, Command)
   , _serverStateAccounts            :: TVar (Map Username Password)
@@ -53,7 +54,7 @@ initServerState mHostName serviceName mudMainPath = do
   when (not $ mudMainPathExists) $
     error $ "Invalid mud code directory: " ++ mudMainPath
   nextIdTVar <- newTVarIO 0
-  serverStateTVar <- newTVarIO $ mempty
+  serverStateConnectionsMap <- SMap.newIO
   serverStateAccounts <- newTVarIO $ mempty
   bchan <- newBroadcastTChanIO
   commandQ <- newTQueueIO
@@ -69,7 +70,7 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStatePort                = serviceName
     , _serverStateConnectionLimit     = 65535
     , _serverStateConnectionNextId    = nextIdTVar
-    , _serverStateConnections         = serverStateTVar
+    , _serverStateConnections         = serverStateConnectionsMap
     , _serverStateBroadcastChannel    = bchan
     , _serverStateCommandQueue        = commandQ
     , _serverStateAccounts            = serverStateAccounts

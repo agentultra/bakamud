@@ -13,6 +13,8 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Focus as Focus
+import qualified StmContainers.Map as SMap
 
 nextConnectionId :: MonadIO m => BakamudServer m ConnectionId
 nextConnectionId = do
@@ -36,9 +38,10 @@ handleLogin connectionId user pass = do
   case challengeResult of
     ChallengeFail -> put connectionId "Invalid login\n"
     ChallengeSuccess -> do
-      connectionsTVar <- asks _serverStateConnections
-      liftIO . atomically . (modifyTVar connectionsTVar) $ \connections ->
-        Map.adjust updateAuthSuccess connectionId connections
+      connectionsMap <- asks _serverStateConnections
+      liftIO . atomically $ do
+        let updateAuthSuccessFocus = Focus.adjust updateAuthSuccess
+        SMap.focus updateAuthSuccessFocus connectionId connectionsMap
       put connectionId "Success!\n"
   where
     updateAuthSuccess :: Connection -> Connection

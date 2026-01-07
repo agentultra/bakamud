@@ -21,14 +21,15 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.ByteString as S
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map as Map
 import Data.Maybe (isJust, maybeToList)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Focus as Focus
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
+import qualified StmContainers.Map as SMap
 
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
@@ -115,9 +116,10 @@ addConnection
   -> Connection
   -> BakamudServer m ()
 addConnection connectionId connection = do
-  connectionsTVar <- asks _serverStateConnections
-  liftIO . atomically . modifyTVar' connectionsTVar $ \connections -> do
-    Map.alter maybeAdd connectionId connections
+  connectionsMap <- asks _serverStateConnections
+  liftIO . atomically $ do
+    let maybeAddFocus = Focus.alter maybeAdd
+    SMap.focus maybeAddFocus connectionId connectionsMap
   where
     maybeAdd :: Maybe Connection -> Maybe Connection
     maybeAdd Nothing = Just connection

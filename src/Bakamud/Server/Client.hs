@@ -8,8 +8,8 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified StmContainers.Map as SMap
 
 broadcast :: MonadIO m => Text -> BakamudServer m ()
 broadcast msg = do
@@ -18,9 +18,9 @@ broadcast msg = do
 
 put :: MonadIO m => ConnectionId -> Text -> BakamudServer m ()
 put connectionId msg = do
-  connectionsTVar <- asks _serverStateConnections
+  connectionsMap <- asks _serverStateConnections
   liftIO . atomically $ do
-    connections <- readTVar connectionsTVar
-    case Map.lookup connectionId connections of
+    maybeConnection <- SMap.lookup connectionId connectionsMap
+    case maybeConnection of
       Nothing -> undefined
       Just Connection {..} -> Q.writeTBQueue _connectionOutput msg
