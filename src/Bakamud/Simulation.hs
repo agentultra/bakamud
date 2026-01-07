@@ -16,6 +16,7 @@ import Data.Time.Clock.System
 import qualified Lua as Lua
 import Foreign.C.String
 import Foreign.C.Types
+import Foreign.Marshal.Alloc
 
 simulation :: MonadIO m => BakamudServer m ()
 simulation = do
@@ -27,7 +28,9 @@ simulation = do
     Lua.luaL_openlibs l
   result <- liftIO $ withCString "main" $ \name -> do
     (codePtr, codeLen) <- newCStringLen mudMainModule
-    Lua.luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
+    luaResult <- Lua.luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
+    free codePtr
+    pure luaResult
   if result /= Lua.LUA_OK
     then error "Error loading MUD code, aborting..."
     else tick l
