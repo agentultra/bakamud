@@ -5,6 +5,7 @@ module Bakamud.Server.State where
 
 import Bakamud.Network.Connection (ConnectionId, Connection)
 import Bakamud.Server.Command
+import Bakamud.Simulation.Event
 import Bakamud.Simulation.Space
 import Control.Concurrent.STM.TChan
 import Control.Concurrent.STM.TQueue
@@ -36,6 +37,7 @@ data ServerState m
   , _serverStateLuaInterpreterState :: TVar State
   -- ^ Path to main user MUD-code module to run simulation
   , _serverStateSimRooms            :: Map Text Room
+  , _serverStateSimulationOutChan   :: TChan SimEvent
   }
 
 initServerState
@@ -56,6 +58,7 @@ initServerState mHostName serviceName mudMainPath = do
   luaState <- Lua.hsluaL_newstate
   luaStateTVar <- newTVarIO luaState
   roomMap <- compileRooms mudMainPath
+  simOutChan <- newTChanIO
   pure
     $ ServerState
     { _serverStateHostName            = mHostName
@@ -69,6 +72,7 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStateMudMainPath         = mudMainPath
     , _serverStateLuaInterpreterState = luaStateTVar
     , _serverStateSimRooms            = roomMap
+    , _serverStateSimulationOutChan   = simOutChan
     }
 
 -- | Read the mudMainPath directory for Room, Exit definitions and

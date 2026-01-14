@@ -72,6 +72,7 @@ library
         Bakamud.Server.State
         Bakamud.Simulation
         Bakamud.Simulation.Component
+        Bakamud.Simulation.Event
         Bakamud.Simulation.Space
 
     -- Modules included in this library but not exported.

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Bakamud.Network.Server where
 
@@ -12,6 +13,8 @@ import Bakamud.Server.Monad
 import Bakamud.Server.State
 import Bakamud.Server.Command
 import Bakamud.Simulation
+import Bakamud.Simulation.Event
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as TB
 import qualified Control.Concurrent.STM.TQueue as TQ
@@ -31,11 +34,14 @@ import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
 import qualified StmContainers.Map as SMap
 
+import qualified Debug.Trace as Debug
+
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
-    _ <- forkBakamud (simulation) (const $ pure ())
-    _ <- forkBakamud (commandDispatch) (const $ pure ())
+    _ <- forkBakamud simulation (const $ pure ())
+    _ <- forkBakamud simulationOutbox (const $ pure ())
+    _ <- forkBakamud commandDispatch (const $ pure ())
     bracketBakamudServer (open addr) (close_) loop
   where
     resolve :: IO AddrInfo
@@ -132,3 +138,17 @@ commandDispatch = do
   forM_ commands $ \command -> do
     dispatchCommand command
   commandDispatch
+
+simulationOutbox :: BakamudServer IO ()
+simulationOutbox = do
+  liftIO $ putStrLn "simulationOutbox start"
+  outChan <- asks _serverStateSimulationOutChan
+
+  liftIO $ putStrLn "simulationOutbox : tryReadTChan"
+  maybeSimEvent <- liftIO . atomically $ tryReadTChan outChan
+
+  when (isJust maybeSimEvent) $
+    liftIO . putStrLn . show $ maybeSimEvent
+
+  liftIO $ threadDelay 100000
+  simulationOutbox

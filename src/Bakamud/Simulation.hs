@@ -4,28 +4,21 @@
 
 module Bakamud.Simulation where
 
-import Bakamud.Network.Connection
 import Bakamud.Server.Monad
 import Bakamud.Server.MudCode
 import Bakamud.Server.State
+import Bakamud.Simulation.Event
 import Control.Concurrent.STM
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Int
 import Data.Time.Clock.System
-import Data.Text (Text)
 import qualified Lua as Lua
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
-
-data SimEvent
-  = ClientConnected ConnectionId
-  | SomethingHappened Text
-  deriving (Eq, Show)
 
 data SimulationState
   = SimulationState
@@ -50,7 +43,6 @@ simulation = do
   -- TODO: Remove this, initialize interpreter state higher up. This
   -- is left-over prototype code.
   l <- liftIO . atomically $ readTVar lTVar
-  outChan <- liftIO $ newTChanIO
   liftIO $ do
     Lua.hslua_pushhsfunction l echo
     withCStringLen "echo" $ \(funName, funNameLen) ->
@@ -66,6 +58,8 @@ simulation = do
   startTimeTVar <- liftIO $ newTVarIO $ systemSeconds startTime
   deltaTimeAccumTVar <- liftIO $ newTVarIO 0
 
+  outChan <- asks _serverStateSimulationOutChan
+
   let initSimulationState
         = SimulationState
         { _simulationStateOutChan = outChan
@@ -80,26 +74,23 @@ simulation = do
 
 tick :: MonadIO m => Simulation m ()
 tick = do
+  outChan <- gets _simulationStateOutChan
   currTimeNano <- systemNanoseconds <$> liftIO getSystemTime
   let currTime = fromIntegral currTimeNano
 
   lastTimeTVar <- gets _simulationStateLastTime
   lastTime <- liftIO . atomically $ readTVar lastTimeTVar
 
-  timeRate <- gets _simulationStateTimeRate
   accTimeTVar <- gets _simulationStateDeltaTimeAccumMs
-  accTime <- liftIO . atomically . readTVar $ accTimeTVar
 
   let dt = currTime - lastTime `div` 1_000_000
 
-  lTVar <- gets _simulationStateLuaInterpreter
-  l <- liftIO . atomically $ readTVar lTVar
-
-  when (accTime + dt > timeRate) $ do
-    _ <- liftIO $ Lua.lua_pcall l (Lua.NumArgs 0) (Lua.NumResults 0) (Lua.StackIndex 0)
-    resetAccTime accTimeTVar
+  resetAccTime accTimeTVar
   setLastTime lastTimeTVar currTime
   accumulateDt dt accTimeTVar
+
+  liftIO . atomically $ do
+    writeTChan outChan $ SomethingHappened "Testing outbox pattern"
 
   tick
   where
