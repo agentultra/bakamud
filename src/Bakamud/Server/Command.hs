@@ -4,6 +4,7 @@ module Bakamud.Server.Command where
 
 import Data.Char
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Void
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -22,7 +23,7 @@ data Command
   | Motd
   | Register Username Password
   | HandleParseError Text
-  | Unprocessed Text
+  | TokenList [Text] -- ^ Passed to game logic for parsing
   deriving (Eq, Show)
 
 type Parser = Parsec Void Text
@@ -61,4 +62,4 @@ registerCommandP = do
 unprocessedCommandP :: Parser Command
 unprocessedCommandP = do
   input <- takeWhile1P Nothing isPrint
-  pure $ Unprocessed input
+  pure . TokenList . Text.splitOn " " $ input
