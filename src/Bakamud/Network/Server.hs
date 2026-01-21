@@ -13,7 +13,6 @@ import Bakamud.Server.Monad
 import Bakamud.Server.State
 import Bakamud.Server.Command
 import Bakamud.Simulation
-import Bakamud.Simulation.Event
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as TB
@@ -33,8 +32,6 @@ import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
 import qualified StmContainers.Map as SMap
-
-import qualified Debug.Trace as Debug
 
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
@@ -141,14 +138,9 @@ commandDispatch = do
 
 simulationOutbox :: BakamudServer IO ()
 simulationOutbox = do
-  liftIO $ putStrLn "simulationOutbox start"
   outChan <- asks _serverStateSimulationOutChan
 
-  liftIO $ putStrLn "simulationOutbox : tryReadTChan"
-  maybeSimEvent <- liftIO . atomically $ tryReadTChan outChan
-
-  when (isJust maybeSimEvent) $
-    liftIO . putStrLn . show $ maybeSimEvent
+  _ <- liftIO . atomically $ tryReadTChan outChan
 
   liftIO $ threadDelay 100000
   simulationOutbox
