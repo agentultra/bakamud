@@ -95,8 +95,6 @@ handleRegister connectionId user pass = do
 
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
 handleTokenList connectionId tokens = do
-  _ <- withLuaInterpreterLock $ \luaState -> do
-    _
   pure ()
   where
     pushToken :: Lua.State -> Text -> IO ()
