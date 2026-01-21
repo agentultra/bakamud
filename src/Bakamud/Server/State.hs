@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Bakamud.Server.State where
 
@@ -23,6 +24,8 @@ import qualified StmContainers.Map as SMap
 import System.FilePath
 import System.Directory
 
+data LockState = Locked | Unlocked deriving (Eq, Show)
+
 data ServerState m
   = ServerState
   { _serverStateHostName            :: Maybe HostName
@@ -34,6 +37,7 @@ data ServerState m
   , _serverStateCommandQueue        :: TQueue (ConnectionId, Command)
   , _serverStateAccounts            :: TVar (Map Username Password)
   , _serverStateMudMainPath         :: FilePath
+  , _serverStateLuaInterpreterLock  :: TVar LockState
   , _serverStateLuaInterpreterState :: TVar State
   -- ^ Path to main user MUD-code module to run simulation
   , _serverStateSimRooms            :: Map Text Room

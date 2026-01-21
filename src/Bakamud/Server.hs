@@ -11,9 +11,12 @@ import Bakamud.Server.State
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import qualified Focus as Focus
+import qualified Lua as Lua
 import qualified StmContainers.Map as SMap
 
 nextConnectionId :: MonadIO m => BakamudServer m ConnectionId
@@ -30,7 +33,7 @@ dispatchCommand (connectionId, command) =
     Motd -> put connectionId "THIS IS THE MOTD\n"
     Login user pass -> handleLogin connectionId user pass
     Register user pass -> handleRegister connectionId user pass
-    _ -> liftIO $ print (connectionId, command)
+    TokenList tokens -> handleTokenList connectionId tokens
 
 handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServer m ()
 handleLogin connectionId user pass = do
@@ -89,3 +92,47 @@ handleRegister connectionId user pass = do
     addAccount :: Username -> Password -> Map Username Password -> Map Username Password
     addAccount username password accounts =
       Map.insert username password accounts
+
+handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
+handleTokenList connectionId tokens = do
+  _ <- withLuaInterpreterLock $ \luaState -> do
+    _
+  pure ()
+  where
+    pushToken :: Lua.State -> Text -> IO ()
+    pushToken = undefined
+
+lockLuaInterpreter :: MonadIO m => BakamudServer m (Maybe Lua.State)
+lockLuaInterpreter = do
+  interpreterLockTVar <- asks _serverStateLuaInterpreterLock
+  interpreterStateTVar <- asks _serverStateLuaInterpreterState
+  liftIO . atomically $ do
+    interpreterLock <- readTVar interpreterLockTVar
+    case interpreterLock of
+      Locked -> pure Nothing
+      Unlocked -> do
+        writeTVar interpreterLockTVar Locked
+        luaInterpreterState <- readTVar interpreterStateTVar
+        pure $ Just luaInterpreterState
+
+unlockLuaInterpreter :: MonadIO m => Lua.State -> BakamudServer m LockState
+unlockLuaInterpreter luaState = do
+  interpreterLockTVar <- asks _serverStateLuaInterpreterLock
+  interpreterStateTVar <- asks _serverStateLuaInterpreterState
+  liftIO . atomically $ do
+    interpreterLock <- readTVar interpreterLockTVar
+    case interpreterLock of
+      Locked -> do
+        writeTVar interpreterStateTVar luaState
+        writeTVar interpreterLockTVar Unlocked
+        pure Unlocked
+      Unlocked -> pure Locked
+
+withLuaInterpreterLock :: MonadIO m => (Lua.State -> IO a) -> BakamudServer m (Maybe a)
+withLuaInterpreterLock callback = do
+  maybeInterpreterLock <- lockLuaInterpreter
+  case maybeInterpreterLock of
+    Nothing -> pure Nothing
+    Just interpreterState -> do
+      returnValue <- liftIO $ callback interpreterState
+      pure $ Just returnValue
