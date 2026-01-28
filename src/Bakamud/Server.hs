@@ -15,9 +15,15 @@ import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Focus as Focus
+import Foreign.C.String (withCString, withCStringLen)
+import qualified Foreign.Ptr as Ptr
+import Foreign.Storable (peek)
 import qualified Lua as Lua
 import qualified StmContainers.Map as SMap
+
+import qualified Debug.Trace as Debug
 
 nextConnectionId :: MonadIO m => BakamudServer m ConnectionId
 nextConnectionId = do
@@ -34,6 +40,7 @@ dispatchCommand (connectionId, command) =
     Login user pass -> handleLogin connectionId user pass
     Register user pass -> handleRegister connectionId user pass
     TokenList tokens -> handleTokenList connectionId tokens
+    _ -> undefined -- TODO: handle the error properly
 
 handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServer m ()
 handleLogin connectionId user pass = do
@@ -94,11 +101,34 @@ handleRegister connectionId user pass = do
       Map.insert username password accounts
 
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
-handleTokenList connectionId tokens = do
+handleTokenList _ tokens = do
+  Debug.traceM "handleTokenList start"
+  let numTokens = fromIntegral $ length tokens
+  result <- withLuaInterpreterLock $ \lstate -> do
+    Debug.traceM $ "handleTokenList - withInterpreterLock"
+    liftIO $ do
+      handleCommandResult <- withCStringLen "handleCommand" $ \(funName, funNameLen) ->
+        Lua.hslua_getglobal lstate funName (fromIntegral funNameLen) Ptr.nullPtr
+      Debug.traceM $ "handleTokenList - handleCommandResult: " ++ show handleCommandResult
+      case handleCommandResult of
+        Lua.LUA_TFUNCTION -> do
+          Lua.lua_createtable lstate numTokens numTokens
+          (`traverse_` (zip [1..] tokens)) $ \(ix, token) -> pushToken lstate ix token
+          callResult <- Lua.lua_pcall lstate (Lua.NumArgs 1) (Lua.NumResults 0) (Lua.StackIndex 0)
+          Debug.traceM $ "handleTokenList - lua_pcall: " ++ show callResult
+        _ -> Debug.trace "Woop!" $ error "handleTokenList: could not find handleCommand user function"
+  Debug.traceM $ "handleTokenList - result: " ++ show result
   pure ()
   where
-    pushToken :: Lua.State -> Text -> IO ()
-    pushToken = undefined
+    pushToken :: Lua.State -> Int -> Text -> IO ()
+    pushToken l ix v = do
+      let statusCode = Ptr.nullPtr
+      withCString (Text.unpack v) $ \cstr -> do
+        Lua.lua_pushnumber l (Lua.Number $ fromIntegral ix)
+        _ <- Lua.lua_pushstring l cstr
+        Lua.hslua_settable l (-3) statusCode
+      status <- peek @Lua.StatusCode statusCode
+      Debug.traceM $ "status: " ++ show status
 
 lockLuaInterpreter :: MonadIO m => BakamudServer m (Maybe Lua.State)
 lockLuaInterpreter = do
@@ -126,11 +156,13 @@ unlockLuaInterpreter luaState = do
         pure Unlocked
       Unlocked -> pure Locked
 
-withLuaInterpreterLock :: MonadIO m => (Lua.State -> IO a) -> BakamudServer m (Maybe a)
+withLuaInterpreterLock :: (MonadIO m, Show a) => (Lua.State -> IO a) -> BakamudServer m (Maybe a)
 withLuaInterpreterLock callback = do
+  Debug.traceM "withLuaInterpreterLock - start"
   maybeInterpreterLock <- lockLuaInterpreter
   case maybeInterpreterLock of
     Nothing -> pure Nothing
     Just interpreterState -> do
       returnValue <- liftIO $ callback interpreterState
+      _ <- unlockLuaInterpreter interpreterState
       pure $ Just returnValue

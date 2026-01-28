@@ -10,6 +10,7 @@ import Bakamud.Monad.Reader (bracketBakamudServer, bracketOnErrorBakamudServer, 
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
 import Bakamud.Server
 import Bakamud.Server.Monad
+import Bakamud.Server.MudCode
 import Bakamud.Server.State
 import Bakamud.Server.Command
 import Bakamud.Simulation
@@ -28,14 +29,31 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Focus as Focus
+import Foreign.C.String (withCString, newCStringLen)
+import Foreign.C.Types (CSize(..))
+import Foreign.Marshal.Alloc (free)
+import qualified Lua as Lua
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
 import qualified StmContainers.Map as SMap
 
+import qualified Debug.Trace as Debug
+
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
+    mudMainModule <- loadMain
+    loadCodeResult <- withLuaInterpreterLock $ \lstate -> do
+      Lua.luaL_openlibs lstate
+      withCString "main" $ \moduleName -> do
+        (codePtr, codeLen) <- newCStringLen mudMainModule
+        luaResult <- Lua.luaL_loadbuffer lstate codePtr (CSize $ fromIntegral codeLen) moduleName
+        free codePtr
+        pure luaResult
+    Debug.traceM $ "runTCPServer ; loadCodeResult: " ++ show loadCodeResult
+    when (loadCodeResult /= Just Lua.LUA_OK) $ do
+      error "Could not load Lua code"
     _ <- forkBakamud simulation (const $ pure ())
     _ <- forkBakamud simulationOutbox (const $ pure ())
     _ <- forkBakamud commandDispatch (const $ pure ())

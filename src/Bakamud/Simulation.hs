@@ -5,7 +5,6 @@
 module Bakamud.Simulation where
 
 import Bakamud.Server.Monad
-import Bakamud.Server.MudCode
 import Bakamud.Server.State
 import Bakamud.Simulation.Event
 import Control.Concurrent.STM
@@ -15,10 +14,6 @@ import Control.Monad.State
 import Data.Int
 import Data.Time.Clock.System
 import qualified Lua as Lua
-import Foreign.C.String
-import Foreign.C.Types
-import Foreign.Marshal.Alloc
-import Foreign.Ptr
 
 data SimulationState
   = SimulationState
@@ -38,21 +33,7 @@ runSimulation initialState = (`evalStateT` initialState) . getSimulation
 
 simulation :: MonadIO m => BakamudServer m ()
 simulation = do
-  mudMainModule <- loadMain
   lTVar <- asks _serverStateLuaInterpreterState
-  -- TODO: Remove this, initialize interpreter state higher up. This
-  -- is left-over prototype code.
-  l <- liftIO . atomically $ readTVar lTVar
-  liftIO $ do
-    Lua.hslua_pushhsfunction l echo
-    withCStringLen "echo" $ \(funName, funNameLen) ->
-      Lua.hslua_setglobal l funName (CSize $ fromIntegral funNameLen) nullPtr
-    Lua.luaL_openlibs l
-  result <- liftIO $ withCString "main" $ \name -> do
-    (codePtr, codeLen) <- newCStringLen mudMainModule
-    luaResult <- Lua.luaL_loadbuffer l codePtr (CSize $ fromIntegral codeLen) name
-    free codePtr
-    pure luaResult
 
   startTime <- liftIO $ getSystemTime
   startTimeTVar <- liftIO $ newTVarIO $ systemSeconds startTime
@@ -68,9 +49,7 @@ simulation = do
         , _simulationStateDeltaTimeAccumMs = deltaTimeAccumTVar
         , _simulationStateTimeRate = 1 -- TODO: set this from configuration
         }
-  if result /= Lua.LUA_OK
-    then error "Error loading MUD code, aborting..."
-    else runSimulation initSimulationState tick
+  runSimulation initSimulationState tick
 
 tick :: MonadIO m => Simulation m ()
 tick = do

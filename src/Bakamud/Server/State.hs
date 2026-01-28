@@ -61,6 +61,7 @@ initServerState mHostName serviceName mudMainPath = do
   commandQ <- newTQueueIO
   luaState <- Lua.hsluaL_newstate
   luaStateTVar <- newTVarIO luaState
+  luaStateLock <- newTVarIO Unlocked
   roomMap <- compileRooms mudMainPath
   simOutChan <- newTChanIO
   pure
@@ -74,6 +75,7 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStateCommandQueue        = commandQ
     , _serverStateAccounts            = serverStateAccounts
     , _serverStateMudMainPath         = mudMainPath
+    , _serverStateLuaInterpreterLock  = luaStateLock
     , _serverStateLuaInterpreterState = luaStateTVar
     , _serverStateSimRooms            = roomMap
     , _serverStateSimulationOutChan   = simOutChan
