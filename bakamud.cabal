@@ -91,6 +91,7 @@ library
         filepath == 1.5.4.0,
         focus == 1.0.3.2,
         hashable == 1.5.1.0,
+        hslua-core == 2.3.2,
         language-lua == 0.11.0.2,
         lua == 2.3.3,
         megaparsec == 9.7.0,

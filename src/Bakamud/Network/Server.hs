@@ -23,16 +23,14 @@ import Control.Monad (forever, when, void, forM_)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S8
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, maybeToList)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Focus as Focus
-import Foreign.C.String (withCString, newCStringLen)
-import Foreign.C.Types (CSize(..))
-import Foreign.Marshal.Alloc (free)
-import qualified Lua as Lua
+import qualified HsLua.Core as Lua
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
@@ -44,15 +42,11 @@ runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
     mudMainModule <- loadMain
-    loadCodeResult <- withLuaInterpreterLock $ \lstate -> do
-      Lua.luaL_openlibs lstate
-      withCString "main" $ \moduleName -> do
-        (codePtr, codeLen) <- newCStringLen mudMainModule
-        luaResult <- Lua.luaL_loadbuffer lstate codePtr (CSize $ fromIntegral codeLen) moduleName
-        free codePtr
-        pure luaResult
+    Debug.traceM $ "runTCPServer - mudMainModule: " ++ mudMainModule
+    loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith state $ do
+      Lua.loadstring $ S8.pack mudMainModule
     Debug.traceM $ "runTCPServer ; loadCodeResult: " ++ show loadCodeResult
-    when (loadCodeResult /= Just Lua.LUA_OK) $ do
+    when (loadCodeResult /= Just Lua.OK) $ do
       error "Could not load Lua code"
     _ <- forkBakamud simulation (const $ pure ())
     _ <- forkBakamud simulationOutbox (const $ pure ())
