@@ -43,8 +43,10 @@ runTCPServer mhost port = do
     addr <- liftIO resolve
     mudMainModule <- loadMain
     Debug.traceM $ "runTCPServer - mudMainModule: " ++ mudMainModule
-    loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith state $ do
+    loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith @Lua.Exception state $ do
+      Lua.openlibs
       Lua.loadstring $ S8.pack mudMainModule
+
     Debug.traceM $ "runTCPServer ; loadCodeResult: " ++ show loadCodeResult
     when (loadCodeResult /= Just Lua.OK) $ do
       error "Could not load Lua code"

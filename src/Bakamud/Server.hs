@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Bakamud.Server where
 
@@ -11,16 +12,12 @@ import Bakamud.Server.State
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Focus as Focus
-import Foreign.C.String (withCString, withCStringLen)
-import qualified Foreign.Ptr as Ptr
-import Foreign.Storable (peek)
-import qualified Lua as Lua
+import qualified HsLua.Core as Lua
+import qualified HsLua.Marshalling as Lua
 import qualified StmContainers.Map as SMap
 
 import qualified Debug.Trace as Debug
@@ -103,32 +100,16 @@ handleRegister connectionId user pass = do
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
 handleTokenList _ tokens = do
   Debug.traceM "handleTokenList start"
-  let numTokens = fromIntegral $ length tokens
-  result <- withLuaInterpreterLock $ \lstate -> do
-    Debug.traceM $ "handleTokenList - withInterpreterLock"
-    liftIO $ do
-      handleCommandResult <- withCStringLen "handleCommand" $ \(funName, funNameLen) ->
-        Lua.hslua_getglobal lstate funName (fromIntegral funNameLen) Ptr.nullPtr
-      Debug.traceM $ "handleTokenList - handleCommandResult: " ++ show handleCommandResult
-      case handleCommandResult of
-        Lua.LUA_TFUNCTION -> do
-          Lua.lua_createtable lstate numTokens numTokens
-          (`traverse_` (zip [1..] tokens)) $ \(ix, token) -> pushToken lstate ix token
-          callResult <- Lua.lua_pcall lstate (Lua.NumArgs 1) (Lua.NumResults 0) (Lua.StackIndex 0)
-          Debug.traceM $ "handleTokenList - lua_pcall: " ++ show callResult
-        _ -> Debug.trace "Woop!" $ error "handleTokenList: could not find handleCommand user function"
+  result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
+    getGlobalResult <- Lua.getglobal "handleCommand"
+    Debug.traceM $ "handleTokenList - handleCommandResult: " ++ show getGlobalResult
+    pushListResult <- Lua.pushList Lua.pushText tokens
+    Debug.traceM $ "handleTokenList - pushListResult: " ++ show pushListResult
+    r <- Lua.pcallTrace 1 0
+    Debug.traceM $ "handleTokenList - pcallTrace result: " ++ show r
+    pure r
   Debug.traceM $ "handleTokenList - result: " ++ show result
   pure ()
-  where
-    pushToken :: Lua.State -> Int -> Text -> IO ()
-    pushToken l ix v = do
-      let statusCode = Ptr.nullPtr
-      withCString (Text.unpack v) $ \cstr -> do
-        Lua.lua_pushnumber l (Lua.Number $ fromIntegral ix)
-        _ <- Lua.lua_pushstring l cstr
-        Lua.hslua_settable l (-3) statusCode
-      status <- peek @Lua.StatusCode statusCode
-      Debug.traceM $ "status: " ++ show status
 
 lockLuaInterpreter :: MonadIO m => BakamudServer m (Maybe Lua.State)
 lockLuaInterpreter = do
