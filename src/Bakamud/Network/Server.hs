@@ -36,18 +36,15 @@ import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
 import qualified StmContainers.Map as SMap
 
-import qualified Debug.Trace as Debug
-
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
     mudMainModule <- loadMain
-    Debug.traceM $ "runTCPServer - mudMainModule: " ++ mudMainModule
     loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith @Lua.Exception state $ do
       Lua.openlibs
-      Lua.loadstring $ S8.pack mudMainModule
+      _ <- Lua.loadstring $ S8.pack mudMainModule
+      Lua.pcall 0 1 Nothing
 
-    Debug.traceM $ "runTCPServer ; loadCodeResult: " ++ show loadCodeResult
     when (loadCodeResult /= Just Lua.OK) $ do
       error "Could not load Lua code"
     _ <- forkBakamud simulation (const $ pure ())

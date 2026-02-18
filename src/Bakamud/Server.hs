@@ -9,6 +9,7 @@ import Bakamud.Server.Command
 import Bakamud.Server.Monad
 import Bakamud.Server.State
 import Control.Concurrent.STM
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Map.Strict (Map)
@@ -18,8 +19,6 @@ import qualified Focus as Focus
 import qualified HsLua.Core as Lua
 import qualified HsLua.Marshalling as Lua
 import qualified StmContainers.Map as SMap
-
-import qualified Debug.Trace as Debug
 
 nextConnectionId :: MonadIO m => BakamudServer m ConnectionId
 nextConnectionId = do
@@ -98,16 +97,13 @@ handleRegister connectionId user pass = do
 
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
 handleTokenList _ tokens = do
-  Debug.traceM "handleTokenList start"
   result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
-    getGlobalResult <- Lua.getglobal "handleCommand"
-    Debug.traceM $ "handleTokenList - handleCommandResult: " ++ show getGlobalResult
-    pushListResult <- Lua.pushList Lua.pushText tokens
-    Debug.traceM $ "handleTokenList - pushListResult: " ++ show pushListResult
+    _ <- Lua.getfield (-1) "handleCommand"
+    _ <- Lua.pushList Lua.pushText tokens
     r <- Lua.pcallTrace 1 0
-    Debug.traceM $ "handleTokenList - pcallTrace result: " ++ show r
     pure r
-  Debug.traceM $ "handleTokenList - result: " ++ show result
+  when (result /= Just Lua.OK) $ do
+    error "Lua code failed"
   pure ()
 
 lockLuaInterpreter :: MonadIO m => BakamudServer m (Maybe Lua.State)
@@ -138,7 +134,6 @@ unlockLuaInterpreter luaState = do
 
 withLuaInterpreterLock :: (MonadIO m, Show a) => (Lua.State -> IO a) -> BakamudServer m (Maybe a)
 withLuaInterpreterLock callback = do
-  Debug.traceM "withLuaInterpreterLock - start"
   maybeInterpreterLock <- lockLuaInterpreter
   case maybeInterpreterLock of
     Nothing -> pure Nothing
