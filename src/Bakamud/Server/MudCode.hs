@@ -10,13 +10,10 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text.Encoding as Text
 import HsLua.Core
 import qualified StmContainers.Map as SMap
 import System.FilePath
-
-import qualified Debug.Trace as Debug
 
 loadMain :: MonadIO m => BakamudServer m String
 loadMain = do
