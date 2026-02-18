@@ -42,6 +42,8 @@ runTCPServer mhost port = do
     mudMainModule <- loadMain
     loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith @Lua.Exception state $ do
       Lua.openlibs
+      Lua.pushHaskellFunction putConnection
+      Lua.setglobal "put_connection"
       _ <- Lua.loadstring $ S8.pack mudMainModule
       Lua.pcall 0 1 Nothing
 
