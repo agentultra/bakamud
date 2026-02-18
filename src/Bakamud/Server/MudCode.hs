@@ -1,14 +1,19 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Bakamud.Server.MudCode where
 
--- import Bakamud.Network.Connection (ConnectionId (..))
+import Bakamud.Network.Connection
 -- import qualified Bakamud.Server.Client as Client
 import Bakamud.Server.Monad
 import Bakamud.Server.State
+import Control.Concurrent.STM
+import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.ByteString.Char8 as BS
--- import qualified Data.Text.Encoding as Text
+import qualified Data.Text.Encoding as Text
 import HsLua.Core
+import qualified StmContainers.Map as SMap
 import System.FilePath
 
 import qualified Debug.Trace as Debug
@@ -18,15 +23,18 @@ loadMain = do
   mainCodePath <- asks _serverStateMudMainPath
   liftIO . readFile $ mainCodePath </> "main.lua"
 
-putConnection :: HaskellFunction e
-putConnection = do
+putConnection :: SMap.Map ConnectionId Connection -> HaskellFunction e
+putConnection connections = do
   mRawConnectionId <- tointeger (nthBottom 1)
   mMsgBytes <- tostring (nthBottom 2)
 
-  Debug.traceM $ "putConnection: " ++ show mRawConnectionId ++ show (BS.unpack <$> mMsgBytes)
   case (mRawConnectionId, mMsgBytes) of
     (Just rawConnectionId, Just msgBytes) -> do
-      -- Client.put (ConnectionId rawConnectionId) Text.decodeUtf8
-      Debug.traceM $ "putConnection - Connection Id: " ++ show rawConnectionId ++ " msg: " ++ BS.unpack msgBytes
+      let connectionId = ConnectionId $ fromIntegral rawConnectionId
+      liftIO . atomically $ do
+        maybeConnection <- SMap.lookup connectionId connections
+        case maybeConnection of
+          Nothing -> undefined
+          Just Connection {..} -> Q.writeTBQueue _connectionOutput $ Text.decodeUtf8 msgBytes
       pure 0
     _ -> Prelude.error "putConnection: invalid arguments"

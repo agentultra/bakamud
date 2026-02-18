@@ -40,9 +40,10 @@ runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
     mudMainModule <- loadMain
+    connMap <- asks _serverStateConnections
     loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith @Lua.Exception state $ do
       Lua.openlibs
-      Lua.pushHaskellFunction putConnection
+      Lua.pushHaskellFunction (putConnection connMap)
       Lua.setglobal "put_connection"
       _ <- Lua.loadstring $ S8.pack mudMainModule
       Lua.pcall 0 1 Nothing
