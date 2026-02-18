@@ -96,11 +96,12 @@ handleRegister connectionId user pass = do
       Map.insert username password accounts
 
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
-handleTokenList _ tokens = do
+handleTokenList (ConnectionId connectionId) tokens = do
   result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
     _ <- Lua.getfield (-1) "handleCommand"
+    _ <- Lua.pushinteger . Lua.Integer $ fromIntegral connectionId
     _ <- Lua.pushList Lua.pushText tokens
-    r <- Lua.pcallTrace 1 0
+    r <- Lua.pcallTrace 2 0
     pure r
   when (result /= Just Lua.OK) $ do
     error "Lua code failed"
