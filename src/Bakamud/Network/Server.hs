@@ -10,7 +10,7 @@ import Bakamud.Monad.Reader (bracketBakamudServer, bracketOnErrorBakamudServer, 
 import Bakamud.Network.Connection (ConnectionId (..), Connection (..))
 import Bakamud.Server
 import Bakamud.Server.Monad
-import Bakamud.Server.MudCode
+import qualified Bakamud.Server.MudCode as MC
 import Bakamud.Server.State
 import Bakamud.Server.Command
 import Bakamud.Simulation
@@ -24,6 +24,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
+import Data.Foldable (traverse_)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, maybeToList)
 import Data.Text (Text)
@@ -39,12 +40,13 @@ import qualified StmContainers.Map as SMap
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
-    mudMainModule <- loadMain
-    connMap <- asks _serverStateConnections
+    mudMainModule <- MC.loadMain
+    serverState <- ask
     loadCodeResult <- withLuaInterpreterLock $ \state -> Lua.runWith @Lua.Exception state $ do
       Lua.openlibs
-      Lua.pushHaskellFunction (putConnection connMap)
-      Lua.setglobal "put_connection"
+      (`traverse_` MC.exportFunctions) $ \(func, fname) -> do
+        Lua.pushHaskellFunction (func serverState)
+        Lua.setglobal fname
       _ <- Lua.loadstring $ S8.pack mudMainModule
       Lua.pcall 0 1 Nothing
 

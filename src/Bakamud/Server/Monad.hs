@@ -5,15 +5,15 @@ import Control.Monad.Reader
 
 newtype BakamudServer m a
   = BakamudServer
-  { getBakamudServer :: ReaderT (ServerState m) m a
+  { getBakamudServer :: ReaderT ServerState m a
   }
   deriving
     ( Applicative
     , Functor
     , Monad
     , MonadIO
-    , MonadReader (ServerState m)
+    , MonadReader ServerState
     )
 
-runBakamudServer :: MonadIO m => ServerState m -> BakamudServer m a -> m a
+runBakamudServer :: MonadIO m => ServerState -> BakamudServer m a -> m a
 runBakamudServer serverState = (`runReaderT` serverState) . getBakamudServer

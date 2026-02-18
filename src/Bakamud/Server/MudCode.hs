@@ -1,9 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Bakamud.Server.MudCode where
 
 import Bakamud.Network.Connection
--- import qualified Bakamud.Server.Client as Client
 import Bakamud.Server.Monad
 import Bakamud.Server.State
 import Control.Concurrent.STM
@@ -20,10 +20,11 @@ loadMain = do
   mainCodePath <- asks _serverStateMudMainPath
   liftIO . readFile $ mainCodePath </> "main.lua"
 
-putConnection :: SMap.Map ConnectionId Connection -> HaskellFunction e
-putConnection connections = do
+putConnection :: ServerState -> HaskellFunction e
+putConnection serverState = do
   mRawConnectionId <- tointeger (nthBottom 1)
   mMsgBytes <- tostring (nthBottom 2)
+  let connections = _serverStateConnections serverState
 
   case (mRawConnectionId, mMsgBytes) of
     (Just rawConnectionId, Just msgBytes) -> do
@@ -35,3 +36,6 @@ putConnection connections = do
           Just Connection {..} -> Q.writeTBQueue _connectionOutput $ Text.decodeUtf8 msgBytes
       pure 0
     _ -> Prelude.error "putConnection: invalid arguments"
+
+exportFunctions :: [(ServerState -> HaskellFunction e, Name)]
+exportFunctions = [(putConnection, "put_connection")]

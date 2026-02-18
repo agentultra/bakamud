@@ -26,7 +26,7 @@ import System.Directory
 
 data LockState = Locked | Unlocked deriving (Eq, Show)
 
-data ServerState m
+data ServerState
   = ServerState
   { _serverStateHostName            :: Maybe HostName
   , _serverStatePort                :: ServiceName
@@ -45,11 +45,10 @@ data ServerState m
   }
 
 initServerState
-  :: Monad m
-  => Maybe HostName
+  :: Maybe HostName
   -> ServiceName
   -> FilePath
-  -> IO (ServerState m)
+  -> IO ServerState
 initServerState mHostName serviceName mudMainPath = do
   mudMainPathExists <- doesDirectoryExist mudMainPath
   when (not $ mudMainPathExists) $
