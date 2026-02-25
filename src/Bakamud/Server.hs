@@ -15,7 +15,6 @@ import Control.Monad.Reader
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text.IO as Text
 import qualified Focus as Focus
 import qualified HsLua.Core as Lua
 import qualified HsLua.Marshalling as Lua
@@ -36,7 +35,7 @@ dispatchCommand (connectionId, command) =
     Login user pass -> handleLogin connectionId user pass
     Register user pass -> handleRegister connectionId user pass
     TokenList tokens -> handleTokenList connectionId tokens
-    HandleParseError err -> pure ()
+    HandleParseError _ -> pure ()
 
 handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServer m ()
 handleLogin connectionId user pass = do
@@ -48,7 +47,17 @@ handleLogin connectionId user pass = do
       liftIO . atomically $ do
         let updateAuthSuccessFocus = Focus.adjust updateAuthSuccess
         SMap.focus updateAuthSuccessFocus connectionId connectionsMap
-      put connectionId "Success!\n"
+      result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
+            _ <- Lua.getfield (-1) "onLogin"
+            _ <- Lua.pushinteger
+              . Lua.Integer
+              . fromIntegral
+              . getConnectionId
+              $ connectionId
+            r <- Lua.pcallTrace 1 0
+            pure r
+      when (result /= Just Lua.OK) $ do
+        error "Lua code failed"
   where
     updateAuthSuccess :: Connection -> Connection
     updateAuthSuccess connection =
