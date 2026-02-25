@@ -15,6 +15,7 @@ import Control.Monad.Reader
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text.IO as Text
 import qualified Focus as Focus
 import qualified HsLua.Core as Lua
 import qualified HsLua.Marshalling as Lua
@@ -35,7 +36,7 @@ dispatchCommand (connectionId, command) =
     Login user pass -> handleLogin connectionId user pass
     Register user pass -> handleRegister connectionId user pass
     TokenList tokens -> handleTokenList connectionId tokens
-    _ -> undefined -- TODO: handle the error properly
+    HandleParseError err -> pure ()
 
 handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServer m ()
 handleLogin connectionId user pass = do

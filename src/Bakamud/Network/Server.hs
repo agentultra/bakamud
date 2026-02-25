@@ -37,6 +37,10 @@ import Network.Socket.ByteString (recv, sendAll)
 import qualified Text.Megaparsec as Parser
 import qualified StmContainers.Map as SMap
 
+logSomeException :: Either E.SomeException () -> IO ()
+logSomeException exc = do
+  putStrLn $ show exc
+
 runTCPServer :: Maybe HostName -> ServiceName -> BakamudServer IO a
 runTCPServer mhost port = do
     addr <- liftIO resolve
@@ -52,9 +56,9 @@ runTCPServer mhost port = do
 
     when (loadCodeResult /= Just Lua.OK) $ do
       error "Could not load Lua code"
-    _ <- forkBakamud simulation (const $ pure ())
-    _ <- forkBakamud simulationOutbox (const $ pure ())
-    _ <- forkBakamud commandDispatch (const $ pure ())
+    _ <- forkBakamud simulation logSomeException
+    _ <- forkBakamud simulationOutbox logSomeException
+    _ <- forkBakamud commandDispatch logSomeException
     bracketBakamudServer (open addr) (close_) loop
   where
     resolve :: IO AddrInfo
