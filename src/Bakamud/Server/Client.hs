@@ -22,5 +22,5 @@ put connectionId msg = do
   liftIO . atomically $ do
     maybeConnection <- SMap.lookup connectionId connectionsMap
     case maybeConnection of
-      Nothing -> undefined
+      Nothing -> undefined -- TODO: should log and continue
       Just Connection {..} -> Q.writeTBQueue _connectionOutput msg

@@ -96,16 +96,25 @@ handleRegister connectionId user pass = do
       Map.insert username password accounts
 
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
-handleTokenList (ConnectionId connectionId) tokens = do
-  result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
-    _ <- Lua.getfield (-1) "handleCommand"
-    _ <- Lua.pushinteger . Lua.Integer $ fromIntegral connectionId
-    _ <- Lua.pushList Lua.pushText tokens
-    r <- Lua.pcallTrace 2 0
-    pure r
-  when (result /= Just Lua.OK) $ do
-    error "Lua code failed"
-  pure ()
+handleTokenList cId@(ConnectionId connectionId) tokens = do
+  connections <- asks _serverStateConnections
+  maybeConnection  <- liftIO . atomically $ SMap.lookup cId connections
+
+  case maybeConnection of
+    Nothing -> error "Missing connection" -- TODO: log this
+    Just connection -> do
+      case _connectionState connection of
+        Anonymous -> put cId "Please authenticate first."
+        Authenticated -> do
+          result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
+            _ <- Lua.getfield (-1) "handleCommand"
+            _ <- Lua.pushinteger . Lua.Integer $ fromIntegral connectionId
+            _ <- Lua.pushList Lua.pushText tokens
+            r <- Lua.pcallTrace 2 0
+            pure r
+          when (result /= Just Lua.OK) $ do
+            error "Lua code failed"
+          pure ()
 
 lockLuaInterpreter :: MonadIO m => BakamudServer m (Maybe Lua.State)
 lockLuaInterpreter = do

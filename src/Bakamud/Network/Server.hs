@@ -119,11 +119,14 @@ talk connectionId c@Connection {..} = do
 
 output :: Connection -> BakamudServer IO ()
 output c@Connection {..} = do
-  outputQEmpty <- liftIO . atomically $ TB.isEmptyTBQueue _connectionOutput
-  when (not outputQEmpty) $ do
-    outputMsg <- liftIO . atomically $ readTBQueue _connectionOutput
-    liftIO $ sendAll _connectionSocket $ T.encodeUtf8 outputMsg
-  broadcastMsg <- liftIO . atomically $ tryReadTChan _connectionBroadcast
+  (maybeMessage, broadcastMsg) <- liftIO . atomically $ do
+    mm <- tryReadTBQueue _connectionOutput
+    mb <- tryReadTChan _connectionBroadcast
+    pure (mm, mb)
+
+  (`traverse_` maybeMessage) $ \msg ->
+    liftIO $ sendAll _connectionSocket $ T.encodeUtf8 msg
+
   when (isJust broadcastMsg) $ do
     let msg = head $ maybeToList broadcastMsg
     liftIO $ sendAll _connectionSocket $ T.encodeUtf8 msg
