@@ -3,6 +3,7 @@
 
 module Bakamud.Server.MudCode where
 
+import Bakamud.Avatar
 import Bakamud.Network.Connection
 import Bakamud.Server.Monad
 import Bakamud.Server.State
@@ -10,9 +11,13 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Int (Int64)
 import qualified Data.Text.Encoding as Text
+import Database.SQLite.Simple (NamedParam (..))
+import qualified Database.SQLite.Simple as DB
 import HsLua.Core (HaskellFunction, Name)
 import qualified HsLua.Core as Lua
+import qualified HsLua.Marshalling as Lua
 import qualified StmContainers.Map as SMap
 import System.FilePath
 
@@ -42,5 +47,37 @@ putConnection serverState = do
         else Lua.pushstring "Connection no longer available" *> Lua.error
     _ -> Prelude.error "putConnection: invalid arguments"
 
-exportFunctions :: [(ServerState -> HaskellFunction e, Name)]
-exportFunctions = [(putConnection, "put_connection")]
+listAvatars :: Lua.LuaError e => ServerState -> HaskellFunction e
+listAvatars serverState = do
+  mRawConnectionId <- Lua.tointeger (Lua.nthBottom 1)
+
+  let connections = _serverStateConnections serverState
+      dbHandle = _serverStateDbHandle serverState
+
+  case mRawConnectionId of
+    Just rawConnectionId@(Lua.Integer rawId) -> do
+      let connectionId = ConnectionId $ fromIntegral rawConnectionId
+      ok <- liftIO . atomically $ do
+        maybeConnection <- SMap.lookup connectionId connections
+        case maybeConnection of
+          Nothing -> pure False
+          Just _ -> do
+            pure True
+      if ok
+        then lookupAvatars dbHandle rawId
+        else Lua.pushstring "Invalid connectionId" *> Lua.error
+    _ -> Lua.pushstring "Invalid connectionId" *> Lua.error
+  where
+    lookupAvatars :: Lua.LuaError e => TVar DB.Connection -> Int64 -> Lua.LuaE e Lua.NumResults
+    lookupAvatars dbHandle rawConnectionId = do
+      conn <- liftIO . atomically $ do
+        readTVar dbHandle
+      avatars <- liftIO $ DB.queryNamed conn "SELECT * FROM avatars WHERE connectionId = :id" [":id" := rawConnectionId]
+      Lua.pushList Lua.pushText (map _avatarName avatars)
+      pure 1
+
+exportFunctions :: Lua.LuaError e => [(ServerState -> HaskellFunction e, Name)]
+exportFunctions =
+  [ (putConnection, "put_connection")
+  , (listAvatars, "list_avatars")
+  ]

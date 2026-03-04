@@ -17,6 +17,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text.IO as Text
+import qualified Database.SQLite.Simple as DB
 import Lua (State)
 import qualified Lua.Ersatz.Auxiliary as Lua
 import Network.Socket
@@ -42,6 +43,7 @@ data ServerState
   -- ^ Path to main user MUD-code module to run simulation
   , _serverStateSimRooms            :: Map Text Room
   , _serverStateSimulationOutChan   :: TChan SimEvent
+  , _serverStateDbHandle            :: TVar DB.Connection
   }
 
 initServerState
@@ -63,6 +65,7 @@ initServerState mHostName serviceName mudMainPath = do
   luaStateLock <- newTVarIO Unlocked
   roomMap <- compileRooms mudMainPath
   simOutChan <- newTChanIO
+  dbHandle <- newTVarIO =<< DB.open "bakamud.db"
   pure
     $ ServerState
     { _serverStateHostName            = mHostName
@@ -78,6 +81,7 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStateLuaInterpreterState = luaStateTVar
     , _serverStateSimRooms            = roomMap
     , _serverStateSimulationOutChan   = simOutChan
+    , _serverStateDbHandle            = dbHandle
     }
 
 -- | Read the mudMainPath directory for Room, Exit definitions and
