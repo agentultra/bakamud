@@ -75,6 +75,7 @@ library
         Bakamud.Simulation.Component
         Bakamud.Simulation.Event
         Bakamud.Simulation.Space
+        Bakamud.User
 
     -- Modules included in this library but not exported.
     -- other-modules:
