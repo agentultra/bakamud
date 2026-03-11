@@ -2,21 +2,13 @@
 
 module Bakamud.Server.Command where
 
+import Bakamud.Account
 import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Void
 import Text.Megaparsec
 import Text.Megaparsec.Char
-
-newtype Username = Username Text
-  deriving (Eq, Ord, Show)
-
-newtype Password = Password Text
-  deriving (Eq)
-
-instance Show Password where
-  show (Password _) = "(Password ***)"
 
 data Command
   = Login Username Password

@@ -4,6 +4,7 @@
 
 module Bakamud.Server.State where
 
+import Bakamud.Account
 import Bakamud.Network.Connection (ConnectionId, Connection)
 import Bakamud.Server.Command
 import Bakamud.Simulation.Event

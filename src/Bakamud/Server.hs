@@ -3,18 +3,22 @@
 module Bakamud.Server where
 
 import Bakamud.Auth
+import Bakamud.Account
 import Bakamud.Network.Connection
 import Bakamud.Server.Client
 import Bakamud.Server.Command
 import Bakamud.Server.Monad
 import Bakamud.Server.State
+import Crypto.BCrypt as BCrypt
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Maybe (listToMaybe)
 import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
+import Database.SQLite.Simple (NamedParam (..))
+import qualified Database.SQLite.Simple as DB
 import qualified Focus as Focus
 import qualified HsLua.Core as Lua
 import qualified HsLua.Marshalling as Lua
@@ -38,14 +42,15 @@ dispatchCommand (connectionId, command) =
     HandleParseError _ -> pure ()
 
 handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServer m ()
-handleLogin connectionId user pass = do
-  challengeResult <- challenge user pass
+handleLogin connectionId username pass = do
+  challengeResult <- challenge username pass
+  connectionsMap <- asks _serverStateConnections
+
   case challengeResult of
     ChallengeFail -> put connectionId "Invalid login\n"
-    ChallengeSuccess -> do
-      connectionsMap <- asks _serverStateConnections
+    ChallengeSuccess account -> do
       liftIO . atomically $ do
-        let updateAuthSuccessFocus = Focus.adjust updateAuthSuccess
+        let updateAuthSuccessFocus = Focus.adjust (updateAuthState account)
         SMap.focus updateAuthSuccessFocus connectionId connectionsMap
       result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
             _ <- Lua.getfield (-1) "onLogin"
@@ -59,23 +64,40 @@ handleLogin connectionId user pass = do
       when (result /= Just Lua.OK) $ do
         error "Lua code failed"
   where
-    updateAuthSuccess :: Connection -> Connection
-    updateAuthSuccess connection =
-      connection { _connectionState = Authenticated }
+    updateAuthState :: Account -> Connection -> Connection
+    updateAuthState account connection =
+      connection { _connectionState = Authenticated
+                 , _connectionUserId = Just $ _accountId account
+                 }
 
-data ChallengeResult = ChallengeSuccess | ChallengeFail deriving (Eq, Show)
+data ChallengeResult = ChallengeSuccess Account | ChallengeFail deriving (Eq, Show)
 
 challenge :: MonadIO m => Username -> Password -> BakamudServer m ChallengeResult
-challenge username password = do
-  accountsTVar <- asks _serverStateAccounts
-  liftIO . atomically $ do
-    accounts <- readTVar accountsTVar
-    case Map.lookup username accounts of
-      Nothing -> pure ChallengeFail
-      Just p  ->
-        if p == password
-        then pure ChallengeSuccess
-        else pure ChallengeFail
+challenge username (Password password) = do
+  --accountsTVar <- asks _serverStateAccounts
+  dbHandle <- asks _serverStateDbHandle
+
+  conn <- liftIO . atomically $ do
+    readTVar dbHandle
+  account <- liftIO $ getAccount conn username
+  if BCrypt.validatePassword (Text.encodeUtf8 . getPassword . _accountUserPass $ account) (Text.encodeUtf8 password)
+    then pure $ ChallengeSuccess account
+    else pure $ ChallengeFail
+  -- liftIO . atomically $ do
+  --   accounts <- readTVar accountsTVar
+  --   case Map.lookup username accounts of
+  --     Nothing -> pure ChallengeFail
+  --     Just p  ->
+  --       if p == password
+  --       then pure $ ChallengeSuccess user
+  --       else pure ChallengeFail
+  where
+    getAccount :: DB.Connection -> Username -> IO Account
+    getAccount conn (Username uname) = do
+      maybeAccount <- listToMaybe <$> DB.queryNamed conn "SELECT * FROM accounts WHERE username = :username" [":username" := uname]
+      case maybeAccount of
+        Nothing -> error "No such user exists"
+        Just account -> pure account
 
 data RegistrationResult
   = RegistrationSucceeded
@@ -89,21 +111,46 @@ handleRegister
   -> Password
   -> BakamudServer m ()
 handleRegister connectionId user pass = do
-  accountsTVar <- asks _serverStateAccounts
-  result <- liftIO . atomically $ do
-    accounts <- readTVar accountsTVar
-    case Map.lookup user accounts of
-      Just _ -> pure RegistrationFailed
-      Nothing -> do
-        writeTVar accountsTVar $ addAccount user pass accounts
-        pure RegistrationSucceeded
-  case result of
-    RegistrationFailed -> put connectionId "Username already in use, try another one.\n"
-    RegistrationSucceeded -> put connectionId "Registration succeeded!\n"
+  -- accountsTVar <- asks _serverStateAccounts
+  dbHandle <- asks _serverStateDbHandle
+
+  conn <- liftIO . atomically $ do
+    readTVar dbHandle
+  maybeAccount <- liftIO $ getAccount conn user
+
+  case maybeAccount of
+    Just _ -> put connectionId "Username already in use, try another one.\n"
+    Nothing -> do
+      liftIO $ do
+        hashedPass <- hashPass pass
+        DB.executeNamed conn "INSERT INTO accounts (username, password) VALUES (:username, :password)" [":username" := user, ":password" := hashedPass]
+      put connectionId "Registration accepted!\n"
+
+  -- result <- liftIO . atomically $ do
+  --   accounts <- readTVar accountsTVar
+  --   case Map.lookup user accounts of
+  --     Just _ -> pure RegistrationFailed
+  --     Nothing -> do
+  --       writeTVar accountsTVar $ addAccount user pass accounts
+  --       pure RegistrationSucceeded
+  -- case result of
+  --   RegistrationFailed -> put connectionId "Username already in use, try another one.\n"
+  --   RegistrationSucceeded -> put connectionId "Registration succeeded!\n"
+  -- where
+  --   addAccount :: Username -> Password -> Map Username Password -> Map Username Password
+  --   addAccount username password accounts =
+  --     Map.insert username password accounts
   where
-    addAccount :: Username -> Password -> Map Username Password -> Map Username Password
-    addAccount username password accounts =
-      Map.insert username password accounts
+    hashPass :: Password -> IO Password
+    hashPass (Password p) = do
+      maybeHashed <- BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy $ Text.encodeUtf8 p
+      case maybeHashed of
+        Nothing -> error "Could not hash password"
+        Just hashed -> pure . Password . Text.decodeUtf8 $ hashed
+
+    getAccount :: DB.Connection -> Username -> IO (Maybe Account)
+    getAccount conn (Username uname) = do
+      listToMaybe <$> DB.queryNamed conn "SELECT * FROM accounts WHERE username = :username" [":username" := uname]
 
 handleTokenList :: MonadIO m => ConnectionId -> [Text] -> BakamudServer m ()
 handleTokenList cId@(ConnectionId connectionId) tokens = do
