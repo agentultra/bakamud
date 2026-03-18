@@ -85,8 +85,18 @@ listAvatars serverState = do
       let (AvatarId avatarId) = _avatarId
       in Lua.pushIntegral avatarId
 
+setAvatar :: ServerState -> HaskellFunction e
+setAvatar _ = do
+  mRawConnectionId <- Lua.tointeger (Lua.nthBottom 1)
+  mRawAvatarId <- Lua.tointeger (Lua.nthBottom 2)
+
+  liftIO $ putStrLn $ "connectionId: " ++ show mRawConnectionId ++ " avatarId: " ++ show mRawAvatarId
+
+  pure 0
+
 exportFunctions :: Lua.LuaError e => [(ServerState -> HaskellFunction e, Name)]
 exportFunctions =
   [ (putConnection, "put_connection")
   , (listAvatars, "list_avatars")
+  , (setAvatar, "set_avatar")
   ]
