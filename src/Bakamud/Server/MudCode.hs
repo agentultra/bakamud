@@ -55,24 +55,24 @@ listAvatars serverState = do
       dbHandle = _serverStateDbHandle serverState
 
   case mRawConnectionId of
-    Just rawConnectionId@(Lua.Integer rawId) -> do
+    Just rawConnectionId -> do
       let connectionId = ConnectionId $ fromIntegral rawConnectionId
-      ok <- liftIO . atomically $ do
-        maybeConnection <- SMap.lookup connectionId connections
-        case maybeConnection of
-          Nothing -> pure False
-          Just _ -> do
-            pure True
-      if ok
-        then lookupAvatars dbHandle rawId
-        else Lua.pushstring "Invalid connectionId" *> Lua.error
+      maybeConnection <- liftIO . atomically $ do
+        SMap.lookup connectionId connections
+      case maybeConnection of
+        Nothing -> Lua.pushstring "Invalid connectionId" *> Lua.error
+        Just connection ->
+          case _connectionAccountId connection of
+            Nothing -> error "Unauthenticated user calling listAvatars" -- TODO: exception handling
+            Just accountId ->
+              lookupAvatars dbHandle accountId
     _ -> Lua.pushstring "Invalid connectionId" *> Lua.error
   where
     lookupAvatars :: Lua.LuaError e => TVar DB.Connection -> Int64 -> Lua.LuaE e Lua.NumResults
-    lookupAvatars dbHandle rawConnectionId = do
+    lookupAvatars dbHandle accountId = do
       conn <- liftIO . atomically $ do
         readTVar dbHandle
-      avatars <- liftIO $ DB.queryNamed conn "SELECT * FROM avatars WHERE connectionId = :id" [":id" := rawConnectionId]
+      avatars <- liftIO $ DB.queryNamed conn "SELECT id, name, account_id FROM avatars WHERE account_id = :id" [":id" := accountId]
       Lua.pushList Lua.pushText (map _avatarName avatars)
       pure 1
 

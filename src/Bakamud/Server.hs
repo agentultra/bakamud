@@ -67,14 +67,13 @@ handleLogin connectionId username pass = do
     updateAuthState :: Account -> Connection -> Connection
     updateAuthState account connection =
       connection { _connectionState = Authenticated
-                 , _connectionUserId = Just $ _accountId account
+                 , _connectionAccountId = Just $ _accountId account
                  }
 
 data ChallengeResult = ChallengeSuccess Account | ChallengeFail deriving (Eq, Show)
 
 challenge :: MonadIO m => Username -> Password -> BakamudServer m ChallengeResult
 challenge username (Password password) = do
-  --accountsTVar <- asks _serverStateAccounts
   dbHandle <- asks _serverStateDbHandle
 
   conn <- liftIO . atomically $ do
@@ -83,14 +82,6 @@ challenge username (Password password) = do
   if BCrypt.validatePassword (Text.encodeUtf8 . getPassword . _accountUserPass $ account) (Text.encodeUtf8 password)
     then pure $ ChallengeSuccess account
     else pure $ ChallengeFail
-  -- liftIO . atomically $ do
-  --   accounts <- readTVar accountsTVar
-  --   case Map.lookup username accounts of
-  --     Nothing -> pure ChallengeFail
-  --     Just p  ->
-  --       if p == password
-  --       then pure $ ChallengeSuccess user
-  --       else pure ChallengeFail
   where
     getAccount :: DB.Connection -> Username -> IO Account
     getAccount conn (Username uname) = do
@@ -125,21 +116,6 @@ handleRegister connectionId user pass = do
         hashedPass <- hashPass pass
         DB.executeNamed conn "INSERT INTO accounts (username, password) VALUES (:username, :password)" [":username" := user, ":password" := hashedPass]
       put connectionId "Registration accepted!\n"
-
-  -- result <- liftIO . atomically $ do
-  --   accounts <- readTVar accountsTVar
-  --   case Map.lookup user accounts of
-  --     Just _ -> pure RegistrationFailed
-  --     Nothing -> do
-  --       writeTVar accountsTVar $ addAccount user pass accounts
-  --       pure RegistrationSucceeded
-  -- case result of
-  --   RegistrationFailed -> put connectionId "Username already in use, try another one.\n"
-  --   RegistrationSucceeded -> put connectionId "Registration succeeded!\n"
-  -- where
-  --   addAccount :: Username -> Password -> Map Username Password -> Map Username Password
-  --   addAccount username password accounts =
-  --     Map.insert username password accounts
   where
     hashPass :: Password -> IO Password
     hashPass (Password p) = do

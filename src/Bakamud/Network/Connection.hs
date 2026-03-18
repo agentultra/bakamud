@@ -21,6 +21,6 @@ data Connection
   , _connectionInput     :: TBQueue Text
   , _connectionOutput    :: TBQueue Text
   , _connectionBroadcast :: TChan Text
-  , _connectionUserId    :: Maybe Int64
+  , _connectionAccountId :: Maybe Int64
   }
   deriving (Eq)
