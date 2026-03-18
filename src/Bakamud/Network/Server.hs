@@ -103,7 +103,7 @@ runTCPServer mhost port = do
       outputQ <- liftIO $ newTBQueueIO 100
       broadcastChan <- liftIO . atomically $ dupTChan bchan
       connectionId <- nextConnectionId
-      let connection = Connection Anonymous s inputQ outputQ broadcastChan Nothing
+      let connection = Connection Anonymous s inputQ outputQ broadcastChan Nothing Nothing
       addConnection connectionId connection
       pure (connectionId, connection)
 

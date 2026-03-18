@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Bakamud.Server.MudCode where
 
@@ -72,9 +73,17 @@ listAvatars serverState = do
     lookupAvatars dbHandle accountId = do
       conn <- liftIO . atomically $ do
         readTVar dbHandle
-      avatars <- liftIO $ DB.queryNamed conn "SELECT id, name, account_id FROM avatars WHERE account_id = :id" [":id" := accountId]
-      Lua.pushList Lua.pushText (map _avatarName avatars)
+      avatars <- liftIO $ DB.queryNamed @Avatar conn "SELECT id, name, account_id FROM avatars WHERE account_id = :id" [":id" := accountId]
+      Lua.pushList (Lua.pushAsTable [("name", pushAvatarName), ("id", pushAvatarId)]) avatars
       pure 1
+
+    pushAvatarName :: Lua.LuaError e => Avatar -> Lua.LuaE e ()
+    pushAvatarName Avatar {..} = Lua.pushText _avatarName
+
+    pushAvatarId :: Lua.LuaError e => Avatar -> Lua.LuaE e ()
+    pushAvatarId Avatar {..} =
+      let (AvatarId avatarId) = _avatarId
+      in Lua.pushIntegral avatarId
 
 exportFunctions :: Lua.LuaError e => [(ServerState -> HaskellFunction e, Name)]
 exportFunctions =
