@@ -31,16 +31,26 @@ instance DB.FromField Password where
 instance Show Password where
   show (Password _) = "(Password ***)"
 
+newtype AccountId = AccountId Int64
+  deriving (Eq, Show)
+
+instance DB.ToField AccountId where
+  toField (AccountId pass) = DB.toField pass
+
+instance DB.FromField AccountId where
+  fromField (DB.Field (DB.SQLInteger pass) _) = DB.Ok $ AccountId pass
+  fromField f = DB.returnError DB.ConversionFailed f "Unable to parse password"
+
 data Account
   = Account
-  { _accountId       :: Int64
+  { _accountId       :: AccountId
   , _accountUserName :: Username
   , _accountUserPass :: Password
   }
   deriving (Eq, Show)
 
 instance DB.ToRow Account where
-  toRow (Account userId username password) = DB.toRow (userId, username, password)
+  toRow (Account accountId username password) = DB.toRow (accountId, username, password)
 
 instance DB.FromRow Account where
   fromRow = Account <$> DB.field <*> DB.field <*> DB.field

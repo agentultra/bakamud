@@ -3,6 +3,7 @@
 
 module Bakamud.Server.MudCode where
 
+import Bakamud.Account
 import Bakamud.Avatar
 import Bakamud.Network.Connection
 import Bakamud.Server.Monad
@@ -11,7 +12,6 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Data.Int (Int64)
 import qualified Data.Text.Encoding as Text
 import Database.SQLite.Simple (NamedParam (..))
 import qualified Database.SQLite.Simple as DB
@@ -68,7 +68,7 @@ listAvatars serverState = do
               lookupAvatars dbHandle accountId
     _ -> Lua.pushstring "Invalid connectionId" *> Lua.error
   where
-    lookupAvatars :: Lua.LuaError e => TVar DB.Connection -> Int64 -> Lua.LuaE e Lua.NumResults
+    lookupAvatars :: Lua.LuaError e => TVar DB.Connection -> AccountId -> Lua.LuaE e Lua.NumResults
     lookupAvatars dbHandle accountId = do
       conn <- liftIO . atomically $ do
         readTVar dbHandle

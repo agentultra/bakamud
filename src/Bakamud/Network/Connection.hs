@@ -1,5 +1,6 @@
 module Bakamud.Network.Connection where
 
+import Bakamud.Account
 import Bakamud.Auth
 import Control.Concurrent.STM.TBQueue (TBQueue)
 import Control.Concurrent.STM.TChan (TChan)
@@ -21,6 +22,6 @@ data Connection
   , _connectionInput     :: TBQueue Text
   , _connectionOutput    :: TBQueue Text
   , _connectionBroadcast :: TChan Text
-  , _connectionAccountId :: Maybe Int64
+  , _connectionAccountId :: Maybe AccountId
   }
   deriving (Eq)
