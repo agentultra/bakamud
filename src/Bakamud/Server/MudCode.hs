@@ -13,9 +13,11 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Maybe (listToMaybe)
 import qualified Data.Text.Encoding as Text
 import Database.SQLite.Simple (NamedParam (..))
 import qualified Database.SQLite.Simple as DB
+import qualified Focus as Focus
 import HsLua.Core (HaskellFunction, Name)
 import qualified HsLua.Core as Lua
 import qualified HsLua.Marshalling as Lua
@@ -85,14 +87,63 @@ listAvatars serverState = do
       let (AvatarId avatarId) = _avatarId
       in Lua.pushIntegral avatarId
 
-setAvatar :: ServerState -> HaskellFunction e
-setAvatar _ = do
-  mRawConnectionId <- Lua.tointeger (Lua.nthBottom 1)
-  mRawAvatarId <- Lua.tointeger (Lua.nthBottom 2)
+setAvatar :: Lua.LuaError e => ServerState -> HaskellFunction e
+setAvatar serverState = do
+  rawConnectionId <- getArgument Lua.tointeger (Lua.nthBottom 1)
+  (Lua.Integer rawAvatarId) <- getArgument Lua.tointeger (Lua.nthBottom 2)
 
-  liftIO $ putStrLn $ "connectionId: " ++ show mRawConnectionId ++ " avatarId: " ++ show mRawAvatarId
+  let connectionId = ConnectionId $ fromIntegral rawConnectionId
+  connection <- getValidConnection serverState connectionId
+  accountId <- requireAccountId connection
 
-  pure 0
+  conn <- liftIO . atomically $ do
+    readTVar $ _serverStateDbHandle serverState
+  avatars <- liftIO $ DB.queryNamed @Avatar conn "SELECT id, name, account_id FROM avatars WHERE account_id = :account_id AND id = :id" [":account_id" := accountId, ":id" := rawAvatarId ]
+  case listToMaybe avatars of
+    Nothing -> Lua.pushstring "Invalid avatar" *> Lua.error
+    Just avatar -> do
+      liftIO . atomically $ do
+        let updateAuthSuccessFocus
+              = Focus.adjust (updateConnectionState avatar)
+        SMap.focus updateAuthSuccessFocus connectionId
+          $ _serverStateConnections serverState
+      pure 0
+  where
+    updateConnectionState :: Avatar -> Connection -> Connection
+    updateConnectionState avatar conn =
+      conn { _connectionAvatarId = Just $ _avatarId avatar }
+
+-- Helpers
+
+getArgument
+  :: Lua.LuaError e
+  => (Lua.StackIndex -> Lua.LuaE e (Maybe a))
+  -> Lua.StackIndex
+  -> Lua.LuaE e a
+getArgument fromLuaStack stackIx = do
+  maybeArgument <- fromLuaStack stackIx
+  case maybeArgument of
+    Nothing -> Lua.failLua "Missing argument"
+    Just argument -> pure argument
+
+getValidConnection
+  :: Lua.LuaError e
+  => ServerState
+  -> ConnectionId
+  -> Lua.LuaE e Connection
+getValidConnection serverState connectionId = do
+  let connections = _serverStateConnections serverState
+  maybeConnection <- liftIO . atomically $ do
+    SMap.lookup connectionId connections
+  case maybeConnection of
+    Nothing -> Lua.failLua "Invalid connection"
+    Just connection -> pure connection
+
+requireAccountId :: Lua.LuaError e => Connection -> Lua.LuaE e AccountId
+requireAccountId connection = do
+  case _connectionAccountId connection of
+    Nothing -> error "assert requireAccountId: should never happen"
+    Just accountId -> pure accountId
 
 exportFunctions :: Lua.LuaError e => [(ServerState -> HaskellFunction e, Name)]
 exportFunctions =
