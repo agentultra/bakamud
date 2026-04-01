@@ -7,6 +7,7 @@ module Bakamud.Server.State where
 import Bakamud.Account
 import Bakamud.Network.Connection (ConnectionId, Connection)
 import Bakamud.Server.Command
+import Bakamud.Session
 import Bakamud.Simulation.Event
 import Bakamud.Simulation.Space
 import Control.Concurrent.STM.TChan
@@ -45,6 +46,7 @@ data ServerState
   , _serverStateSimRooms            :: Map Text Room
   , _serverStateSimulationOutChan   :: TChan SimEvent
   , _serverStateDbHandle            :: TVar DB.Connection
+  , _serverStateSessions            :: SMap.Map ConnectionId Session
   }
 
 initServerState
@@ -67,6 +69,7 @@ initServerState mHostName serviceName mudMainPath = do
   roomMap <- compileRooms mudMainPath
   simOutChan <- newTChanIO
   dbHandle <- newTVarIO =<< DB.open "bakamud.db"
+  serverStateSessionsMap <- SMap.newIO
   pure
     $ ServerState
     { _serverStateHostName            = mHostName
@@ -83,6 +86,7 @@ initServerState mHostName serviceName mudMainPath = do
     , _serverStateSimRooms            = roomMap
     , _serverStateSimulationOutChan   = simOutChan
     , _serverStateDbHandle            = dbHandle
+    , _serverStateSessions            = serverStateSessionsMap
     }
 
 -- | Read the mudMainPath directory for Room, Exit definitions and

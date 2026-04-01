@@ -9,6 +9,7 @@ import Bakamud.Server.Client
 import Bakamud.Server.Command
 import Bakamud.Server.Monad
 import Bakamud.Server.State
+import Bakamud.Session
 import Crypto.BCrypt as BCrypt
 import Control.Concurrent.STM
 import Control.Monad
@@ -45,13 +46,16 @@ handleLogin :: MonadIO m => ConnectionId -> Username -> Password -> BakamudServe
 handleLogin connectionId username pass = do
   challengeResult <- challenge username pass
   connectionsMap <- asks _serverStateConnections
+  sessionsMap <- asks _serverStateSessions
 
   case challengeResult of
     ChallengeFail -> put connectionId "Invalid login\n"
     ChallengeSuccess account -> do
       liftIO . atomically $ do
-        let updateAuthSuccessFocus = Focus.adjust (updateAuthState account)
+        let updateAuthSuccessFocus = Focus.adjust updateAuthState
+            updateSessionFocus = Focus.adjust (updateSessionState account)
         SMap.focus updateAuthSuccessFocus connectionId connectionsMap
+        SMap.focus updateSessionFocus connectionId sessionsMap
       result <- withLuaInterpreterLock $ \lstate -> Lua.runWith @Lua.Exception lstate $ do
             _ <- Lua.getfield (-1) "onLogin"
             _ <- Lua.pushinteger
@@ -62,13 +66,16 @@ handleLogin connectionId username pass = do
             r <- Lua.pcallTrace 1 0
             pure r
       when (result /= Just Lua.OK) $ do
-        error "Lua code failed"
+        error "handleLogin: Lua code failed"
   where
-    updateAuthState :: Account -> Connection -> Connection
-    updateAuthState account connection =
+    updateAuthState :: Connection -> Connection
+    updateAuthState connection =
       connection { _connectionState = Authenticated
-                 , _connectionAccountId = Just $ _accountId account
                  }
+
+    updateSessionState :: Account -> Session -> Session
+    updateSessionState account session =
+      session { _sessionAccountId = Just $ _accountId account }
 
 data ChallengeResult = ChallengeSuccess Account | ChallengeFail deriving (Eq, Show)
 

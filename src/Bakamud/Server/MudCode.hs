@@ -9,6 +9,7 @@ import Bakamud.Avatar
 import Bakamud.Network.Connection
 import Bakamud.Server.Monad
 import Bakamud.Server.State
+import Bakamud.Session
 import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
@@ -54,18 +55,18 @@ listAvatars :: Lua.LuaError e => ServerState -> HaskellFunction e
 listAvatars serverState = do
   mRawConnectionId <- Lua.tointeger (Lua.nthBottom 1)
 
-  let connections = _serverStateConnections serverState
+  let sessions = _serverStateSessions serverState
       dbHandle = _serverStateDbHandle serverState
 
   case mRawConnectionId of
     Just rawConnectionId -> do
       let connectionId = ConnectionId $ fromIntegral rawConnectionId
-      maybeConnection <- liftIO . atomically $ do
-        SMap.lookup connectionId connections
-      case maybeConnection of
+      maybeSession <- liftIO . atomically $ do
+        SMap.lookup connectionId sessions
+      case maybeSession of
         Nothing -> Lua.pushstring "Invalid connectionId" *> Lua.error
-        Just connection ->
-          case _connectionAccountId connection of
+        Just session ->
+          case _sessionAccountId session of
             Nothing -> error "Unauthenticated user calling listAvatars" -- TODO: exception handling
             Just accountId ->
               lookupAvatars dbHandle accountId
@@ -93,8 +94,8 @@ setAvatar serverState = do
   (Lua.Integer rawAvatarId) <- getArgument Lua.tointeger (Lua.nthBottom 2)
 
   let connectionId = ConnectionId $ fromIntegral rawConnectionId
-  connection <- getValidConnection serverState connectionId
-  accountId <- requireAccountId connection
+  session <- getValidSession serverState connectionId
+  accountId <- requireAccountId session
 
   conn <- liftIO . atomically $ do
     readTVar $ _serverStateDbHandle serverState
@@ -104,14 +105,14 @@ setAvatar serverState = do
     Just avatar -> do
       liftIO . atomically $ do
         let updateAuthSuccessFocus
-              = Focus.adjust (updateConnectionState avatar)
+              = Focus.adjust (updateSession avatar)
         SMap.focus updateAuthSuccessFocus connectionId
-          $ _serverStateConnections serverState
+          $ _serverStateSessions serverState
       pure 0
   where
-    updateConnectionState :: Avatar -> Connection -> Connection
-    updateConnectionState avatar conn =
-      conn { _connectionAvatarId = Just $ _avatarId avatar }
+    updateSession :: Avatar -> Session -> Session
+    updateSession avatar session =
+      session { _sessionAvatarId = Just $ _avatarId avatar }
 
 -- Helpers
 
@@ -139,9 +140,22 @@ getValidConnection serverState connectionId = do
     Nothing -> Lua.failLua "Invalid connection"
     Just connection -> pure connection
 
-requireAccountId :: Lua.LuaError e => Connection -> Lua.LuaE e AccountId
-requireAccountId connection = do
-  case _connectionAccountId connection of
+getValidSession
+  :: Lua.LuaError e
+  => ServerState
+  -> ConnectionId
+  -> Lua.LuaE e Session
+getValidSession serverState connectionId = do
+  let sessions = _serverStateSessions serverState
+  maybeConnection <- liftIO . atomically $ do
+    SMap.lookup connectionId sessions
+  case maybeConnection of
+    Nothing -> Lua.failLua "Invalid connection"
+    Just session -> pure session
+
+requireAccountId :: Lua.LuaError e => Session -> Lua.LuaE e AccountId
+requireAccountId session = do
+  case _sessionAccountId session of
     Nothing -> error "assert requireAccountId: should never happen"
     Just accountId -> pure accountId
 

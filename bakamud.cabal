@@ -72,6 +72,7 @@ library
         Bakamud.Server.Monad
         Bakamud.Server.MudCode
         Bakamud.Server.State
+        Bakamud.Session
         Bakamud.Simulation
         Bakamud.Simulation.Component
         Bakamud.Simulation.Event

@@ -13,6 +13,7 @@ import Bakamud.Server.Monad
 import qualified Bakamud.Server.MudCode as MC
 import Bakamud.Server.State
 import Bakamud.Server.Command
+import Bakamud.Session
 import Bakamud.Simulation
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
@@ -103,8 +104,9 @@ runTCPServer mhost port = do
       outputQ <- liftIO $ newTBQueueIO 100
       broadcastChan <- liftIO . atomically $ dupTChan bchan
       connectionId <- nextConnectionId
-      let connection = Connection Anonymous s inputQ outputQ broadcastChan Nothing Nothing
+      let connection = Connection Anonymous s inputQ outputQ broadcastChan
       addConnection connectionId connection
+      addSession connectionId
       pure (connectionId, connection)
 
 talk :: ConnectionId -> Connection -> BakamudServer IO ()
@@ -150,6 +152,16 @@ addConnection connectionId connection = do
     maybeAdd :: Maybe Connection -> Maybe Connection
     maybeAdd Nothing = Just connection
     maybeAdd (Just existingConnection) = Just existingConnection
+
+addSession :: MonadIO m => ConnectionId -> BakamudServer m ()
+addSession connectionId = do
+  sessionsMap <- asks _serverStateSessions
+  liftIO . atomically $ do
+    let insertFocus = Focus.insert newSession
+    SMap.focus insertFocus connectionId sessionsMap
+  where
+    newSession :: Session
+    newSession = Session Nothing Nothing
 
 commandDispatch :: BakamudServer IO ()
 commandDispatch = do
