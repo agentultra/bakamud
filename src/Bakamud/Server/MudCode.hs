@@ -10,6 +10,7 @@ import Bakamud.Network.Connection
 import Bakamud.Server.Monad
 import Bakamud.Server.State
 import Bakamud.Session
+import Bakamud.Simulation.Space
 import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
@@ -114,6 +115,25 @@ setAvatar serverState = do
     updateSession avatar session =
       session { _sessionAvatarId = Just $ _avatarId avatar }
 
+getRoom :: Lua.LuaError e => ServerState -> HaskellFunction e
+getRoom serverState = do
+  (Lua.Integer rawConnectionId) <- getArgument Lua.tointeger (Lua.nthBottom 1)
+  avatarId <- requireAvatarId serverState (ConnectionId $ fromIntegral rawConnectionId)
+  liftIO . putStrLn $ "getRoom: " ++ show avatarId
+  -- TODO: lookup the room from the in-memory map!
+  let testRoom = Room "Test Room" "A very cool room, with many florid adjectives." []
+  Lua.pushAsTable [("name", pushRoomName), ("description", pushRoomDescription), ("exits", pushRoomExits)] testRoom
+  pure 1
+  where
+    pushRoomName :: Lua.LuaError e => Room -> Lua.LuaE e ()
+    pushRoomName Room {..} = Lua.pushText roomName
+
+    pushRoomDescription :: Lua.LuaError e => Room -> Lua.LuaE e ()
+    pushRoomDescription Room {..} = Lua.pushText roomDescription
+
+    pushRoomExits :: Lua.LuaError e => Room -> Lua.LuaE e ()
+    pushRoomExits Room {..} = Lua.pushList Lua.pushText roomExits
+
 -- Helpers
 
 getArgument
@@ -153,6 +173,17 @@ getValidSession serverState connectionId = do
     Nothing -> Lua.failLua "Invalid connection"
     Just session -> pure session
 
+requireAvatarId
+  :: Lua.LuaError e
+  => ServerState
+  -> ConnectionId
+  -> Lua.LuaE e AvatarId
+requireAvatarId serverState connectionId = do
+  session <- getValidSession serverState connectionId
+  case _sessionAvatarId session of
+    Nothing -> Lua.failLua "Missing avatar"
+    Just avatarId -> pure avatarId
+
 requireAccountId :: Lua.LuaError e => Session -> Lua.LuaE e AccountId
 requireAccountId session = do
   case _sessionAccountId session of
@@ -164,4 +195,5 @@ exportFunctions =
   [ (putConnection, "put_connection")
   , (listAvatars, "list_avatars")
   , (setAvatar, "set_avatar")
+  , (getRoom, "get_room")
   ]
