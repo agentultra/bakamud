@@ -15,6 +15,7 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.STM.TBQueue as Q
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe)
 import qualified Data.Text.Encoding as Text
 import Database.SQLite.Simple (NamedParam (..))
@@ -116,14 +117,26 @@ setAvatar serverState = do
       session { _sessionAvatarId = Just $ _avatarId avatar }
 
 getRoom :: Lua.LuaError e => ServerState -> HaskellFunction e
-getRoom serverState = do
+getRoom serverState@ServerState {..} = do
   (Lua.Integer rawConnectionId) <- getArgument Lua.tointeger (Lua.nthBottom 1)
-  avatarId <- requireAvatarId serverState (ConnectionId $ fromIntegral rawConnectionId)
-  liftIO . putStrLn $ "getRoom: " ++ show avatarId
-  -- TODO: lookup the room from the in-memory map!
-  let testRoom = Room "Test Room" "A very cool room, with many florid adjectives." []
-  Lua.pushAsTable [("name", pushRoomName), ("description", pushRoomDescription), ("exits", pushRoomExits)] testRoom
-  pure 1
+  (connectionId, _) <- getValidConnection serverState (ConnectionId $ fromIntegral rawConnectionId)
+  let sessions = _serverStateSessions
+      rooms = _serverStateSimRooms
+  maybeSession <- liftIO . atomically $ do
+    SMap.lookup connectionId sessions
+  case maybeSession of
+    Nothing -> pure 0
+    Just Session {..} -> do
+      case _sessionAvatarRoomId of
+        Nothing -> pure 0
+        Just roomId -> do
+          let maybeRoom = Map.lookup roomId rooms
+          case maybeRoom of
+            Nothing -> pure 0
+            Just room -> do
+              Lua.pushAsTable [("name", pushRoomName), ("description", pushRoomDescription), ("exits", pushRoomExits)] room
+              pure 1
+
   where
     pushRoomName :: Lua.LuaError e => Room -> Lua.LuaE e ()
     pushRoomName Room {..} = Lua.pushText roomName
@@ -151,14 +164,14 @@ getValidConnection
   :: Lua.LuaError e
   => ServerState
   -> ConnectionId
-  -> Lua.LuaE e Connection
+  -> Lua.LuaE e (ConnectionId, Connection)
 getValidConnection serverState connectionId = do
   let connections = _serverStateConnections serverState
   maybeConnection <- liftIO . atomically $ do
     SMap.lookup connectionId connections
   case maybeConnection of
     Nothing -> Lua.failLua "Invalid connection"
-    Just connection -> pure connection
+    Just connection -> pure (connectionId, connection)
 
 getValidSession
   :: Lua.LuaError e

@@ -161,7 +161,7 @@ addSession connectionId = do
     SMap.focus insertFocus connectionId sessionsMap
   where
     newSession :: Session
-    newSession = Session Nothing Nothing
+    newSession = Session Nothing Nothing Nothing
 
 commandDispatch :: BakamudServer IO ()
 commandDispatch = do
