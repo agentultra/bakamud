@@ -17,6 +17,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe)
+import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Database.SQLite.Simple (NamedParam (..))
 import qualified Database.SQLite.Simple as DB
@@ -121,23 +122,26 @@ getRoom serverState@ServerState {..} = do
   (Lua.Integer rawConnectionId) <- getArgument Lua.tointeger (Lua.nthBottom 1)
   (connectionId, _) <- getValidConnection serverState (ConnectionId $ fromIntegral rawConnectionId)
   let sessions = _serverStateSessions
-      rooms = _serverStateSimRooms
   maybeSession <- liftIO . atomically $ do
     SMap.lookup connectionId sessions
-  case maybeSession of
+  let maybeRoom
+        = maybeGetRoom serverState
+        =<< getAvatarRoomId
+        =<< maybeSession
+  case maybeRoom of
     Nothing -> pure 0
-    Just Session {..} -> do
-      case _sessionAvatarRoomId of
-        Nothing -> pure 0
-        Just roomId -> do
-          let maybeRoom = Map.lookup roomId rooms
-          case maybeRoom of
-            Nothing -> pure 0
-            Just room -> do
-              Lua.pushAsTable [("name", pushRoomName), ("description", pushRoomDescription), ("exits", pushRoomExits)] room
-              pure 1
-
+    Just room -> do
+      Lua.pushAsTable [("name", pushRoomName), ("description", pushRoomDescription), ("exits", pushRoomExits)] room
+      pure 1
   where
+    getAvatarRoomId :: Session -> Maybe Text
+    getAvatarRoomId Session {..} = _sessionAvatarRoomId
+
+    maybeGetRoom :: ServerState -> Text -> Maybe Room
+    maybeGetRoom ServerState {..} roomId =
+      let rooms = _serverStateSimRooms
+      in Map.lookup roomId rooms
+
     pushRoomName :: Lua.LuaError e => Room -> Lua.LuaE e ()
     pushRoomName Room {..} = Lua.pushText roomName
 
