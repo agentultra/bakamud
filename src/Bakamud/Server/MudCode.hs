@@ -106,16 +106,22 @@ setAvatar serverState = do
   case listToMaybe avatars of
     Nothing -> Lua.pushstring "Invalid avatar" *> Lua.error
     Just avatar -> do
-      liftIO . atomically $ do
-        let updateAuthSuccessFocus
-              = Focus.adjust (updateSession avatar)
-        SMap.focus updateAuthSuccessFocus connectionId
-          $ _serverStateSessions serverState
-      pure 0
+      sessions <- liftIO $ DB.queryNamed conn "SELECT account_id, avatar_id, avatar_room_id FROM sessions WHERE account_id = :account_id AND avatar_id = :avatar_id" [":account_id" := accountId, ":avatar_id" := _avatarId avatar]
+      case listToMaybe sessions of
+        Nothing -> pure 0
+        Just dbSession -> do
+          liftIO . atomically $ do
+            let updateSessionFocus
+                  = Focus.adjust (updateSession avatar dbSession)
+            SMap.focus updateSessionFocus connectionId
+              $ _serverStateSessions serverState
+          pure 0
   where
-    updateSession :: Avatar -> Session -> Session
-    updateSession avatar session =
-      session { _sessionAvatarId = Just $ _avatarId avatar }
+    updateSession :: Avatar -> Session -> Session -> Session
+    updateSession avatar dbSession session =
+      session { _sessionAvatarId = Just $ _avatarId avatar
+              , _sessionAvatarRoomId = _sessionAvatarRoomId dbSession
+              }
 
 getRoom :: Lua.LuaError e => ServerState -> HaskellFunction e
 getRoom serverState@ServerState {..} = do
