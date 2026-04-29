@@ -59,7 +59,7 @@ parseRoomDefinition luaCode = do
   where
     getField :: Lua.TableField -> Either RoomDefinitionError (Text, RoomFieldType)
     getField (Lua.ExpField (Lua.String name) (Lua.String val)) = do
-      pure (strip name, RoomText val)
+      pure (strip name, RoomText $ strip val)
     getField (Lua.ExpField (Lua.String name) (Lua.TableConst fields)) = do
       exits <- traverse getExitField fields
       pure (strip name, RoomListText exits)
